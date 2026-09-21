@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 260" width="100%" height="100%">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#1C1917" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#15803D"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+      <path d="M 0 0 L 8 4 L 0 8 Z" fill="#DC2626"/>
+    </marker>
+  </defs>
+
+  <!-- Title / Container Background (Warm Parchment & Retro Border) -->
+  <rect x="0" y="0" width="420" height="260" rx="10" fill="#F7F5F0" stroke="#D0C7B8" stroke-width="2"/>
+  <rect x="4" y="4" width="412" height="34" rx="8" fill="#EFECE6"/>
+  <text x="210" y="25" text-anchor="middle" font-family="'Press Start 2P', monospace" font-size="9" fill="#0F766E" letter-spacing="0.5">ALUR LOGIKA PERCABANGAN (IF-ELSE)</text>
+
+  <!-- Belah Ketupat Keputusan (Decision Diamond: Kondisi?) -->
+  <g filter="url(#shadow)">
+    <polygon points="210,58 285,98 210,138 135,98" fill="#FFFFFF" stroke="#D97706" stroke-width="2.5"/>
+    <text x="210" y="94" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="12" font-weight="bold" fill="#1C1917">Kondisi ?</text>
+    <text x="210" y="112" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9" fill="#92400E">(Evaluasi Boolean)</text>
+  </g>
+
+  <!-- Jalur Kiri: YA / TRUE (Forest Emerald) -->
+  <path d="M 135,98 L 90,98 L 90,165" fill="none" stroke="#15803D" stroke-width="2.5" marker-end="url(#arrow-green)"/>
+  <rect x="52" y="114" width="34" height="20" rx="4" fill="#DCFCE7" stroke="#15803D" stroke-width="1.5"/>
+  <text x="69" y="128" text-anchor="middle" font-family="'Inter', sans-serif" font-size="11" font-weight="bold" fill="#15803D">Ya</text>
+
+  <!-- Kotak Aksi 1 (IF Block - TRUE) -->
+  <g filter="url(#shadow)">
+    <rect x="30" y="170" width="120" height="58" rx="8" fill="#FFFFFF" stroke="#15803D" stroke-width="2"/>
+    <rect x="30" y="170" width="120" height="22" rx="6" fill="#15803D"/>
+    <text x="90" y="185" text-anchor="middle" font-family="'Inter', sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF">Aksi 1 (TRUE)</text>
+    <text x="90" y="208" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600" fill="#15803D">hasil = "Lulus"</text>
+  </g>
+
+  <!-- Jalur Kanan: TIDAK / FALSE (Crimson Red) -->
+  <path d="M 285,98 L 330,98 L 330,165" fill="none" stroke="#DC2626" stroke-width="2.5" marker-end="url(#arrow-red)"/>
+  <rect x="334" y="114" width="48" height="20" rx="4" fill="#FEE2E2" stroke="#DC2626" stroke-width="1.5"/>
+  <text x="358" y="128" text-anchor="middle" font-family="'Inter', sans-serif" font-size="11" font-weight="bold" fill="#DC2626">Tidak</text>
+
+  <!-- Kotak Aksi 2 (ELSE Block - FALSE) -->
+  <g filter="url(#shadow)">
+    <rect x="270" y="170" width="120" height="58" rx="8" fill="#FFFFFF" stroke="#DC2626" stroke-width="2"/>
+    <rect x="270" y="170" width="120" height="22" rx="6" fill="#DC2626"/>
+    <text x="330" y="185" text-anchor="middle" font-family="'Inter', sans-serif" font-size="10" font-weight="bold" fill="#FFFFFF">Aksi 2 (FALSE)</text>
+    <text x="330" y="208" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="9.5" font-weight="600" fill="#DC2626">hasil = "Remidi"</text>
+  </g>
+
+  <!-- Footer Tip Instruksional -->
+  <text x="210" y="246" text-anchor="middle" font-family="'Inter', sans-serif" font-size="9.5" fill="#78716C">Komputer mengevaluasi kondisi secara deterministik: satu cabang dipilih pasti.</text>
+</svg>

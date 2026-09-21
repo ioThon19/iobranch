@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <circle cx="32" cy="32" r="28" fill="#0F766E" stroke="#D0C7B8" stroke-width="2.5"/>
+  <circle cx="32" cy="32" r="23" fill="#EFECE6" stroke="#042F2E" stroke-width="1.5"/>
+  <!-- Titik Mata Angin -->
+  <rect x="31" y="11" width="2" height="3" fill="#0F766E"/>
+  <rect x="31" y="50" width="2" height="3" fill="#0F766E"/>
+  <rect x="11" y="31" width="3" height="2" fill="#0F766E"/>
+  <rect x="50" y="31" width="3" height="2" fill="#0F766E"/>
+  <!-- Jarum Kompas (Utara: Crimson Alert, Selatan: Charcoal Ink) -->
+  <polygon points="32,15 37,32 32,30" fill="#DC2626"/>
+  <polygon points="32,15 27,32 32,30" fill="#B91C1C"/>
+  <polygon points="32,49 37,32 32,34" fill="#78716C"/>
+  <polygon points="32,49 27,32 32,34" fill="#1C1917"/>
+  <circle cx="32" cy="32" r="3.5" fill="#D97706" stroke="#92400E" stroke-width="1"/>
+</svg>

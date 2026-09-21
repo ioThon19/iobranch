@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0F766E" />
+  <meta name="description" content="iobranch - Game Belajar Percabangan Logika Pemrograman untuk Murid SMA Kelas X" />
+  <link rel="icon" type="image/webp" href="/assets/logo.webp" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/assets/logo.webp" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Press+Start+2P&display=swap"
+    rel="stylesheet" />
+  <title>iobranch - Petualangan Logika Informatika SMA</title>
+</head>
+
+<body>
+  <div id="app">
+    <!-- Header Navigasi Global (Persisten 100% di Atas) -->
+    <header id="global-header"></header>
+
+    <!-- Workspace Utama Responsif -->
+    <main id="main-workspace">
+      <!-- Frame Konsol Game Minimalis Modern (Kiri di Desktop/Tablet, Atas di Mobile) -->
+      <div id="game-console-wrapper">
+        <div class="console-bezel-frame">
+          <!-- Layar Kanvas Game Phaser 3 -->
+          <div id="game-container"></div>
+        </div>
+      </div>
+
+      <!-- Panel Kontrol & Konten Interaktif DOM (Kanan di Desktop/Tablet, Bawah di Mobile) -->
+      <div id="ui-overlay"></div>
+    </main>
+
+    <!-- Footer Banner Universal Persisten (Membentang 100% di Bawah Workspace) -->
+    <footer id="global-footer"></footer>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>
