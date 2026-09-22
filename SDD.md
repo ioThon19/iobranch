@@ -2,7 +2,7 @@
 ## iobranch — Interactive 2D Pixel Art Logic Tracer PWA
 
 **Nama Produk**: iobranch  
-**Versi Dokumen**: 2.0.0 (Sinkronisasi Arsitektur Nyata & Standar Rekayasa Anti-Slop)  
+**Versi Dokumen**: 2.1.0 (Sinkronisasi First-Attempt Lock, Practice Mode, & exploredBranches)  
 **Status**: Approved Architecture Blueprint  
 **Arsitek Sistem**: Lead Educational Game Architect & Software Engineer  
 **Standar Rekayasa & Desain**: Standar Anti-Slop ([github.com/miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop))  
@@ -197,7 +197,7 @@ export function evaluateCondition(leftValue: number, op: RelationalOperator, rig
 }
 ```
 
-#### B. Antarmuka Data Sesi Murid & Penilaian Formatif PTK
+#### B. Antarmuka Data Sesi Murid, Progres Modul, & Penilaian Formatif PTK
 
 ```typescript
 // src/types/session.types.ts
@@ -215,15 +215,31 @@ export interface StudentSession {
   createdAt: number;        // Timestamp pembuatan sesi
 }
 
+export interface ModuleProgress {
+  testedBranches: string[];    // Cabang yang TERBUKTI BENAR (hipotesis murid cocok) → menentukan skor & bintang
+  exploredBranches?: string[]; // Cabang yang SUDAH DIJELAJAHI (simulasi selesai, terlepas dari benar/salah) → menentukan akses ke Tantangan
+  stars: number;               // Jumlah bintang yang diraih (0, 1, atau 2)
+  isCompleted: boolean;        // true jika semua cabang wajib sudah teruji
+  xpEarned: number;            // XP yang diperoleh dari modul ini
+  updatedAt: number;           // Timestamp pembaruan terakhir
+}
+
 export interface FormativeScores {
-  telusurScore: number;          // Pilar 1: Nilai Telusur (Bobot 30/30/40, maks 100)
+  tracingScore: number;          // Pilar 1: Nilai Telusur (Bobot 30/30/40, maks 100)
   battleScore: number;           // Pilar 2: Nilai Tantangan Bug Monster (0-100)
   evaluasiScore: number;         // Pilar 3: Nilai Evaluasi Mandiri 5 Soal (0-100)
   evaluasiAttemptCount: number;  // Jumlah percobaan pengerjaan evaluasi
   finalScore: number;            // Rerata berbobot penilaian formatif resmi (0-100)
-  completedAt?: number;          // Timestamp penyelesaian resmi
+  isTracingLocked: boolean;      // true → nilai telusur dikunci (first-attempt lock aktif)
+  isBattleLocked: boolean;       // true → nilai tantangan dikunci (first-attempt lock aktif)
+  isEvaluasiLocked: boolean;     // true → nilai evaluasi dikunci (first-attempt lock aktif)
+  updatedAt: number;             // Timestamp pembaruan terakhir
 }
 ```
+
+**Semantik Pemisahan `testedBranches` vs `exploredBranches`**:
+* `testedBranches`: hanya diisi saat prediksi hipotesis murid (`userPrediction`) BENAR sesuai cabang yang dieksekusi simulator. Ini yang menentukan skor dan bintang.
+* `exploredBranches`: diisi setiap kali murid menyelesaikan simulasi penuh, meskipun hipotesisnya salah. Ini yang menentukan apakah tombol "Lanjut ke Tantangan" dapat ditekan.
 
 ---
 
@@ -251,11 +267,15 @@ Komponen ini merender diagram alir SVG murni berstandar Flowgorithm:
 ---
 
 ### 3.6 Layanan Penyimpanan & Penilaian Formatif (`StorageService.ts`)
-Menggunakan `idb-keyval` untuk penyimpanan asinkronus yang andal:
+Menggunakan `idb-keyval` untuk penyimpanan asinkronus yang andal. Seluruh operasi tulis dikomunikasikan via `formativeWritePromise` (promise chain serializer) untuk menghindari race condition:
 * `saveSession()` / `getSession()`: Mengelola sesi tim belajar murid.
-* `getFormativeScores()`: Menghitung nilai formatif resmi berdasarkan bobot kontekstual kasus:
+* `getModuleProgress(moduleId)` / `saveModuleProgress(moduleId, data)`: Membaca dan menyimpan data `ModuleProgress` per kasus, termasuk `testedBranches` dan `exploredBranches`.
+* `getFormativeScores()`: Membaca skor formatif resmi yang sudah tersimpan (`tracingScore` dari nilai terkunci jika `isTracingLocked === true`), bukan menghitung ulang dari progress live:
   * Siklus 1: Kasus 1 (30 poin), Kasus 2 (30 poin), Kasus 3 (40 poin) -> Total 100 poin.
   * Siklus 2: Kasus 1 (15), Kasus 2 (15), Kasus 3 (20), Kasus 4 (25), Kasus 5 (25) -> Total 100 poin.
+* `recordFirstAttemptTracing(score)`: Dikunci via promise chain; hanya menyimpan skor jika `isTracingLocked` belum aktif, lalu menandai `isTracingLocked = true`.
+* `recordFirstAttemptBattle(score)`: Pola identik untuk pilar Tantangan; mengunci `isBattleLocked = true`.
+* `recordFirstAttemptEvaluasi(score, attemptCount)`: Pola identik untuk pilar Evaluasi; mengunci `isEvaluasiLocked = true`.
 * `generateProgressTextReport()`: Menghasilkan berkas ringkasan teks terstruktur yang merangkum seluruh data kasus uji, lencana, dan skor untuk disalin ke LKPD fisik.
 
 ---
@@ -266,6 +286,30 @@ Menggunakan `idb-keyval` untuk penyimpanan asinkronus yang andal:
 * **Pengunggahan Dua Jalur (Mobile-First)**:
   1. *Jalur Utama (Web Share API)*: Memicu jendela bagikan sistem operasi ponsel (Android/iOS) sehingga murid dapat memilih aplikasi Google Drive dan menyimpan ke folder kelas dalam 2 ketukan.
   2. *Jalur Cadangan (Fallback)*: Mengunduh berkas secara lokal dan membuka tautan Google Drive guru di tab peramban baru.
+
+---
+
+### 3.8 Sistem Mode Latihan & Flag State UIManager (`UIManager.ts`)
+`UIManager` adalah pengendali utama 12 layar antarmuka DOM. Setelah implementasi v2.1.0, `UIManager` membawa tiga flag mode latihan yang diinisialisasi ulang setiap kali `setScreen()` dipanggil:
+
+```typescript
+// Tiga flag mode latihan (diinisialisasi di setScreen())
+private isEvaluasiPracticeMode = false;  // true → evaluasi sedang dalam mode latihan
+private isBattlePracticeMode   = false;  // true → tantangan sedang dalam mode latihan
+private isTracingPracticeMode  = false;  // true → lab telusur sedang dalam mode latihan
+```
+
+**Alur Deteksi Mode Latihan**:
+1. `setScreen('TRACING')` membaca `formativeScores.isTracingLocked` dari `StorageService`.
+2. Jika `isTracingLocked === true` → set `isTracingPracticeMode = true` → tampilkan modal "Mode Latihan Lab Telusur" setelah 120 ms delay.
+3. Seluruh operasi tulis di dalam `finishTraceRun()` dilewati jika `isTracingPracticeMode === true`.
+4. Badge header Hero Card berubah dari hijau *"Lab Formatif"* menjadi abu-abu *"Mode Latihan"*.
+5. Pola identik diterapkan pada `setScreen('BATTLE')` dan `setScreen('EVALUASI')`.
+
+**Guard Storage pada Mode Latihan**:
+* Saat `isTracingPracticeMode` aktif: `saveModuleCoverage`, `recordFirstAttemptTracing` tidak dipanggil.
+* Hanya `exploredBranches` yang tetap diperbarui (murid tetap bisa menjelajahi cabang baru saat latihan).
+* Saat `isBattlePracticeMode` atau `isEvaluasiPracticeMode` aktif: seluruh operasi tulis skor diblokir sepenuhnya.
 
 ---
 
@@ -349,4 +393,4 @@ Sesuai standar Craftsmanship Anti-Slop **C-4 (Resilience)**:
 
 ## 7. Status Dokumen
 
-Dokumen `SDD.md` versi 2.0.0 ini merupakan cetak biru resmi yang merefleksikan 100% kondisi nyata kode sumber aplikasi **`iobranch`**. Dokumen ini menjadi acuan mutlak bagi pelaksanaan dan analisis Penelitian Tindakan Kelas (PTK) Informatika SMA.
+Dokumen `SDD.md` versi 2.1.0 ini merupakan cetak biru resmi yang merefleksikan 100% kondisi nyata kode sumber aplikasi **`iobranch`** per 22 September 2026, termasuk arsitektur First-Attempt Lock, Practice Mode System tiga pilar, dan pemisahan semantik `testedBranches` vs `exploredBranches`. Dokumen ini menjadi acuan mutlak bagi pelaksanaan dan analisis Penelitian Tindakan Kelas (PTK) Informatika SMA.

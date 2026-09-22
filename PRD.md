@@ -2,7 +2,7 @@
 ## iobranch — Interactive Gamified Logic Tracer PWA
 
 **Nama Produk**: iobranch  
-**Versi**: 2.0.0 (Sinkronisasi Penuh Implementasi & Standar Anti-Slop)  
+**Versi**: 2.1.0 (Sinkronisasi First-Attempt Lock, Practice Mode, & Sistem Akses Telusur)  
 **Status**: Approved Living Specification  
 **Penyusun**: Lead Educational Software Architect & Instructional Designer  
 **Prinsip Desain & Kualitas**: Mengadopsi Standar **Anti-Slop** ([github.com/miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop))  
@@ -210,8 +210,8 @@ Media ini dirancang dengan mengintegrasikan tiga kerangka kerja pedagogis modern
   * Begitu kedua prediksi dipilih, tombol simulasi aktif menyala.
   * Pasca-simulasi, aplikasi membandingkan tebakan murid dengan fakta jalannya program secara objektif dan mendidik.
 
-### FR-5: Sistem Penilaian Formatif PTK Berbobot (100 Poin) & Bintang Telusur
-* **Deskripsi**: Sistem penilaian formatif terstruktur yang menggantikan sistem XP konvensional guna menjamin validitas evaluasi tindakan kelas.
+### FR-5: Sistem Penilaian Formatif PTK Berbobot (100 Poin) & First-Attempt Lock
+* **Deskripsi**: Sistem penilaian formatif terstruktur dengan penguncian nilai percobaan pertama (*First-Attempt Lock*) pada ketiga pilar asesmen, menjamin validitas evaluasi tindakan kelas.
 * **Pembobotan Kasus Telusur**:
   * **Siklus 1 (3 Kasus Wajib)**:
     * Kasus 1 (`m01` - Gerbang MRT): Bobot 30 poin.
@@ -223,6 +223,13 @@ Media ini dirancang dengan mengintegrasikan tiga kerangka kerja pedagogis modern
 * **Kriteria Bintang Telusur**:
   * Kasus 1 & 2 selesai (skor minimal 60 poin) meraih **1 Bintang**.
   * Seluruh 3 kasus selesai (skor 100 poin) meraih **2 Bintang Tuntas**.
+* **Pemisahan Akses vs Nilai (Tracing)**:
+  * **`testedBranches`** (Cabang Terbukti Benar): Menentukan nilai/stars. Hanya diisi jika prediksi hipotesis murid **cocok** dengan cabang yang dieksekusi simulator.
+  * **`exploredBranches`** (Cabang Sudah Dijelajahi): Menentukan akses ke halaman Tantangan. Diisi setiap kali murid menyelesaikan simulasi penuh, meskipun prediksinya salah. Murid dapat lanjut ke Tantangan setelah menjelajahi semua kasus siklus aktif.
+* **Penguncian First-Attempt Lock (Tiga Pilar)**:
+  * `isTracingLocked`: Dikunci otomatis saat murid pertama kali menuntaskan seluruh kasus siklus aktif. Nilai telusur tidak dapat berubah setelah dikunci.
+  * `isBattleLocked`: Dikunci saat murid pertama kali memenangkan 5 ronde pertarungan. Skor tantangan tetap 100.
+  * `isEvaluasiLocked`: Dikunci saat murid pertama kali mengumpulkan jawaban evaluasi 5 soal. Skor berdasarkan jumlah jawaban benar.
 
 ### FR-6: Sistem Bantuan Bertahap (*Adaptive Scaffolding*)
 * **Deskripsi**: Bantuan reflektif saat hasil simulasi berbeda dengan prediksi murid.
@@ -248,8 +255,32 @@ Media ini dirancang dengan mengintegrasikan tiga kerangka kerja pedagogis modern
 * **Mekanika**:
   * Karakter murid menghadapi Bug Monster dalam 5 ronde evaluasi kondisi.
   * Setiap ronde menyajikan aturan kondisi logika percabangan. Keputusan tepat memberikan serangan kritis dan poin evaluasi.
-  * Skor tantangan tercatat 0–100 pada penilaian formatif tim.
+  * Skor tantangan tercatat 0–100 pada penilaian formatif tim dan dikunci via `isBattleLocked` setelah percobaan pertama.
   * Tersedia mode latihan mandiri pasca-penyelesaian tantangan pertama untuk memperdalam pemahaman tanpa mengubah skor resmi.
+
+### FR-10: Ekspor Asesmen Formatif & Integrasi Cloud Drive (Web Share API)
+* **Deskripsi**: Fasilitas pengambilan data kemajuan belajar formatif kelompok dari IndexedDB untuk dianalisis oleh guru sebagai bukti triangulasi tindakan PTK.
+* **Format Penamaan File Standar**:
+  `iobranch_Siklus[Siklus]_[CleanPairId]_[M1]_[M2].csv` dan `.txt`  
+  (Contoh: `iobranch_Siklus1_Tim_Absen_03-14_Budi3_Siti14.csv`).
+* **Format Rekap**:
+  * Berkas CSV: Timestamp, Siklus, PairId, Nama Murid 1, Absen Murid 1, Nama Murid 2, Absen Murid 2, Lambang Tim, Nilai Telusur Kasus, Skor Tantangan Monster, Nilai Evaluasi Formatif, dan Nilai Formatif Akhir.
+  * Berkas TXT: Laporan tertulis rapi yang memuat rekapitulasi data uji, capaian lencana, dan refleksi belajar tim untuk lampiran LKPD fisik.
+* **Dua Jalur Pengunggahan**:
+  1. *Jalur Utama (Web Share API)*: Membuka jendela bagikan bawaan ponsel untuk menyimpan langsung ke Google Drive kelas dalam 2 ketukan.
+  2. *Jalur Cadangan (Fallback)*: Mengunduh berkas fisik secara lokal ke gawai dan membuka tautan Google Drive guru di tab baru.
+
+### FR-11: Sistem Mode Latihan Tiga Pilar (*Practice Mode System*)
+* **Deskripsi**: Setelah murid menyelesaikan sesi resmi pada salah satu dari tiga pilar asesmen (Telusur, Tantangan, Evaluasi), sistem secara otomatis mengaktifkan Mode Latihan saat murid mengakses kembali halaman tersebut.
+* **Mekanika**:
+  * **Deteksi Otomatis**: Saat memasuki halaman yang sudah selesai (`isTracingLocked`, `isBattleLocked`, atau `isEvaluasiLocked` bernilai `true`), sistem menampilkan modal informatif.
+  * **Modal Pemberitahuan**: Teks modal mencantumkan bahwa nilai formatif resmi tidak akan berubah; murid dipersilakan berlatih untuk mengasah pemahaman.
+  * **Badge Status**: Header halaman menampilkan badge *"Mode Latihan"* (abu-abu netral) sebagai pengganti badge *"Lab Formatif"* / *"Tantangan Formatif"* (hijau resmi).
+  * **Guard Storage**: Seluruh operasi tulis ke `StorageService` (nilai stars, testedBranches, skor) diblokir selama sesi latihan aktif. Hanya `exploredBranches` yang tetap dapat diperbarui pada Lab Telusur.
+* **Teks Modal per Pilar**:
+  * **Lab Telusur**: *"Tim kalian telah menyelesaikan misi Lab Telusur ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman penelusuran kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian."*
+  * **Tantangan**: *"Kalian telah menyelesaikan misi Tantangan ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman evaluasi kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian."*
+  * **Evaluasi**: *"Tim kalian telah menyelesaikan evaluasi resmi Siklus 1 sebelumnya. Kalian dipersilakan mengerjakan ulang untuk memperdalam pemahaman konsep logika percabangan, namun nilai formatif resmi tetap menggunakan hasil pengerjaan pertama."*
 
 ### FR-10: Ekspor Asesmen Formatif & Integrasi Cloud Drive (Web Share API)
 * **Deskripsi**: Fasilitas pengambilan data kemajuan belajar formatif kelompok dari IndexedDB untuk dianalisis oleh guru sebagai bukti triangulasi tindakan PTK.
@@ -357,6 +388,9 @@ Sebelum media digunakan dalam tindakan kelas nyata, aplikasi wajib memenuhi selu
 - [x] **PASS**: Saklar dwi-bahasa (Pseudocode <-> Bahasa C) beralih seketika dengan pemetaan baris yang presisi.
 - [x] **PASS**: Diagram alir Flowgorithm SVG terintegrasi dan menyala sinkron dengan baris kode aktif.
 - [x] **PASS**: Tombol simulasi terkunci sebelum murid memilih prediksi nilai kondisi dan cabang.
+- [x] **PASS**: Nilai formatif hanya dicatat jika prediksi hipotesis murid BENAR (hipotesis salah = explored, bukan tested).
+- [x] **PASS**: First-Attempt Lock aktif pada ketiga pilar (`isTracingLocked`, `isBattleLocked`, `isEvaluasiLocked`).
+- [x] **PASS**: Mode Latihan aktif otomatis (modal + badge) saat murid kembali ke halaman yang sudah selesai.
 - [x] **PASS**: Sistem penilaian formatif berbobot (30/30/40) tercatat akurat dan sinkron dengan dasbor progres.
 - [x] **PASS**: Modul Siklus II terkunci rapat dan dapat dibuka via token murid (`SIKLUS2`) atau PIN guru (`PTK10`).
 - [x] **PASS**: Aplikasi berfungsi normal 100% dalam Mode Pesawat (*Airplane Mode*) tanpa koneksi internet.
