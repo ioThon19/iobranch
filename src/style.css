@@ -3571,3 +3571,76 @@ button:disabled {
     gap: 8px !important;
   }
 }
+
+/* =================================================================
+   Bilah Tab Navigasi Dasbor Progres (Screen 08 - Zero Hidden Tab Mobile 360px)
+   ================================================================= */
+.progress-nav-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-retro);
+  padding: 6px 2px 12px 2px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.progress-nav-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  width: 100%;
+  border-radius: 8px;
+  white-space: nowrap;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+.progress-tab-label-full {
+  display: inline;
+}
+
+.progress-tab-label-short {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .progress-nav-tabs {
+    gap: 6px;
+    padding: 4px 0 10px 0;
+  }
+
+  .progress-nav-tab-btn {
+    padding: 6px 4px;
+    font-size: 11px;
+    gap: 4px;
+    min-height: 38px;
+  }
+
+  .progress-tab-label-full {
+    display: none;
+  }
+
+  .progress-tab-label-short {
+    display: inline;
+  }
+}
+
+@media (max-width: 380px) {
+  .progress-nav-tabs {
+    gap: 4px;
+  }
+
+  .progress-nav-tab-btn {
+    padding: 6px 2px;
+    font-size: 10px;
+    gap: 3px;
+  }
+}

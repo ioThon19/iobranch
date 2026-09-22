@@ -1223,7 +1223,7 @@ export class UIManager {
               ${renderPixelIcon('help', 14, 'var(--primary)')} Panduan Petualangan ${hasReadGuide ? renderPixelIcon('check', 11, 'var(--success)') : ''}
             </button>
           `}
-          <a id="btn-menu-drive-lkpd" href="https://drive.google.com/drive/folders/1259eAOfYs9FZdFJxEUieCdBZTLI72rPr?hl=ID" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Folder Google Drive LKPD Siklus 1">
+          <a id="btn-menu-drive-lkpd" href="${escapeHtml(sanitizeWebUrl(StorageService.getDriveUrlSync()))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Folder Google Drive LKPD Siklus 1">
             ${renderPixelIcon('drive', 14, 'var(--primary)')} Folder Drive LKPD Siklus 1
           </a>
           <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
@@ -5588,7 +5588,7 @@ export class UIManager {
   }
 
   // =================================================================
-  // Layar 08: Dasbor Capaian Belajar, Lencana, & Rekap LKPD
+  // Layar 08: Dasbor Capaian Belajar, Lencana, & Pengiriman Hasil Progres
   // =================================================================
   private renderScreenProgres(): HTMLElement {
     const card = document.createElement('div');
@@ -5606,6 +5606,7 @@ export class UIManager {
       isBattleLocked: false,
       updatedAt: Date.now()
     };
+    const currentDriveUrl = StorageService.getDriveUrlSync();
 
     card.innerHTML = `
       <!-- Header Dasbor Progres -->
@@ -5705,16 +5706,22 @@ export class UIManager {
         </div>
       </div>
 
-      <!-- Bilah Tab Navigasi Dasbor Progres -->
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-retro); padding: 8px 4px 10px 4px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none;">
-        <button id="tab-btn-badges" type="button" class="game-btn ${this.activeProgressTab === 'BADGES' ? 'game-btn-primary' : 'game-btn-secondary'}" style="font-size: 12px; min-height: 38px; padding: 6px 14px; gap: 6px; flex-shrink: 0; white-space: nowrap;">
-          ${renderPixelIcon('trophy', 13, 'currentColor')} Lencana Pencapaian
+      <!-- Bilah Tab Navigasi Dasbor Progres (Responsif Penuh Mobile 360px - Zero Hidden Tab) -->
+      <div class="progress-nav-tabs">
+        <button id="tab-btn-badges" type="button" class="game-btn progress-nav-tab-btn ${this.activeProgressTab === 'BADGES' ? 'game-btn-primary' : 'game-btn-secondary'}">
+          ${renderPixelIcon('trophy', 12, 'currentColor')}
+          <span class="progress-tab-label-full">Lencana Pencapaian</span>
+          <span class="progress-tab-label-short">Lencana</span>
         </button>
-        <button id="tab-btn-modules" type="button" class="game-btn ${this.activeProgressTab === 'MODULES' ? 'game-btn-primary' : 'game-btn-secondary'}" style="font-size: 12px; min-height: 38px; padding: 6px 14px; gap: 6px; flex-shrink: 0; white-space: nowrap;">
-          ${renderPixelIcon('book', 13, 'currentColor')} Materi &amp; Kasus
+        <button id="tab-btn-modules" type="button" class="game-btn progress-nav-tab-btn ${this.activeProgressTab === 'MODULES' ? 'game-btn-primary' : 'game-btn-secondary'}">
+          ${renderPixelIcon('book', 12, 'currentColor')}
+          <span class="progress-tab-label-full">Materi &amp; Kasus</span>
+          <span class="progress-tab-label-short">Materi</span>
         </button>
-        <button id="tab-btn-export" type="button" class="game-btn ${this.activeProgressTab === 'EXPORT' ? 'game-btn-primary' : 'game-btn-secondary'}" style="font-size: 12px; min-height: 38px; padding: 6px 14px; gap: 6px; flex-shrink: 0; white-space: nowrap;">
-          ${renderPixelIcon('drive', 13, 'currentColor')} Pengumpulan LKPD
+        <button id="tab-btn-export" type="button" class="game-btn progress-nav-tab-btn ${this.activeProgressTab === 'EXPORT' ? 'game-btn-primary' : 'game-btn-secondary'}">
+          ${renderPixelIcon('drive', 12, 'currentColor')}
+          <span class="progress-tab-label-full">Kirim Hasil Progres</span>
+          <span class="progress-tab-label-short">Kirim Progres</span>
         </button>
       </div>
 
@@ -5831,20 +5838,40 @@ export class UIManager {
           </div>
         `
           : `
-          <!-- Tampilan Pengumpulan LKPD & Google Drive Guru -->
-          <div class="pixel-card" style="padding: 16px; border: 2px solid var(--warning);">
-            <div style="font-family: var(--font-pixel); font-size: 10.5px; color: var(--warning); margin-bottom: 8px;">
-              Pengumpulan Rekap Formatif LKPD
+          <!-- Tampilan Pengiriman Hasil Progres & Google Drive Guru -->
+          <div class="tactile-card" style="padding: 20px; background: #ffffff; border: 1px solid var(--border-retro); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 6px 16px -4px rgba(28, 25, 23, 0.05);">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+              <div style="font-family: var(--font-pixel); font-size: 11px; color: var(--primary);">
+                Kirim Hasil Progres Belajar
+              </div>
+              <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2);">
+                Folder Google Drive Siklus ${this.isCycle2Unlocked ? '2' : '1'}
+              </span>
             </div>
+            
             <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.6;">
-              Kirimkan laporan kemajuan belajar tim kalian ke Google Drive Guru untuk penilaian formatif kelas.
+              Unduh berkas rekap kemajuan belajar formatif tim kalian dalam format teks (.txt), lalu kirimkan berkas tersebut ke folder Google Drive Guru untuk penilaian formatif kelas.
             </p>
+
+            <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
+                Petunjuk Pengiriman Dua Langkah:
+              </div>
+              <ol style="margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.6;">
+                <li>Klik tombol <strong>Unduh Rekap &amp; Buka Google Drive</strong> di bawah untuk mengunduh berkas laporan teks (.txt) sekaligus membuka folder tugas guru.</li>
+                <li>Pada tab Google Drive yang terbuka, seret atau unggah berkas <em>iobranch_rekap_...txt</em> yang baru saja terunduh ke dalam folder tersebut.</li>
+              </ol>
+            </div>
+
             <div style="display: flex; flex-direction: column; gap: 10px;">
-              <button id="btn-export-drive" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; gap: 8px;">
-                ${renderPixelIcon('drive', 15, 'currentColor')} Kirim Rekap ke Google Drive Guru
+              <button id="btn-export-drive" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; gap: 8px; font-size: 13px; font-weight: 700;">
+                ${renderPixelIcon('drive', 15, '#ffffff')} Unduh Rekap &amp; Buka Google Drive Guru
               </button>
-              <button id="btn-download-txt" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 48px; gap: 8px;">
-                ${renderPixelIcon('document', 15, 'currentColor')} Unduh Berkas Laporan Teks (.txt)
+              <a id="btn-open-drive-folder" href="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-gold" style="width: 100%; min-height: 44px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Halaman Upload Folder Google Drive Guru">
+                ${renderPixelIcon('drive', 14, '#ffffff')} Buka Halaman Upload Google Drive
+              </a>
+              <button id="btn-download-txt" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12px; gap: 8px;">
+                ${renderPixelIcon('document', 14, 'currentColor')} Hanya Unduh Berkas Laporan Teks (.txt)
               </button>
             </div>
           </div>
@@ -5892,16 +5919,26 @@ export class UIManager {
     const exportDriveBtn = card.querySelector<HTMLButtonElement>('#btn-export-drive');
     exportDriveBtn?.addEventListener('click', async () => {
       soundFx.playButtonBlip();
+      // Buka tab Google Drive guru secara langsung dalam synchronous user gesture
+      const driveUrl = StorageService.getDriveUrlSync();
+      const popupWindow = window.open(driveUrl, '_blank');
+
       const originalHtml = exportDriveBtn.innerHTML;
       exportDriveBtn.disabled = true;
-      exportDriveBtn.innerHTML = `${renderPixelIcon('drive', 13, '#ffffff')} Menyiapkan Berkas...`;
+      exportDriveBtn.innerHTML = `${renderPixelIcon('drive', 13, '#ffffff')} Mengunduh Berkas...`;
       try {
-        const res = await AssessmentExportService.exportToDrive();
+        const res = await AssessmentExportService.exportToDrive(driveUrl, popupWindow);
         this.showRetroToast(res.message, res.success !== false);
+      } catch {
+        this.showRetroToast('Gagal menyiapkan berkas laporan.', false);
       } finally {
         exportDriveBtn.disabled = false;
         exportDriveBtn.innerHTML = originalHtml;
       }
+    });
+
+    card.querySelector('#btn-open-drive-folder')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
     });
 
     card.querySelector('#btn-download-txt')?.addEventListener('click', async () => {
