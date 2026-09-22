@@ -43,7 +43,10 @@ async function safeDel(key: string): Promise<void> {
   }
 }
 
+export const DEFAULT_DRIVE_URL = 'https://drive.google.com/drive/folders/1259eAOfYs9FZdFJxEUieCdBZTLI72rPr?hl=ID';
+
 export class StorageService {
+  private static driveUrlMemoryCache: string = DEFAULT_DRIVE_URL;
   private static progressionMemoryCache: ProgressionState | null = null;
   private static progressionWritePromise: Promise<ProgressionState> | null = null;
   private static formativeMemoryCache: FormativeScores | null = null;
@@ -207,20 +210,33 @@ export class StorageService {
   }
 
   /**
-   * Mengambil URL Google Drive tujuan pengumpulan
+   * Mengambil URL Google Drive tujuan pengumpulan secara sinkron dari memori lokal
    */
+  public static getDriveUrlSync(): string {
+    return this.driveUrlMemoryCache || DEFAULT_DRIVE_URL;
+  }
+
   /**
-   * Mengambil URL Google Drive tujuan pengumpulan (default: https://s.id/progres-siklus1)
+   * Mengambil URL Google Drive tujuan pengumpulan (default: Google Drive Folder LKPD Siklus 1)
    */
   public static async getDriveUrl(): Promise<string> {
-    return (await safeGet<string>(STORAGE_KEYS.DRIVE_URL, 'https://s.id/progres-siklus1')) || 'https://s.id/progres-siklus1';
+    const stored = await safeGet<string>(STORAGE_KEYS.DRIVE_URL, DEFAULT_DRIVE_URL);
+    if (!stored || stored === 'https://s.id/progres-siklus1' || stored.includes('1wwpkYt4PMCnGL2NgMR_Bp88B0PxN_FwC')) {
+      this.driveUrlMemoryCache = DEFAULT_DRIVE_URL;
+      await safeSet(STORAGE_KEYS.DRIVE_URL, DEFAULT_DRIVE_URL);
+      return DEFAULT_DRIVE_URL;
+    }
+    this.driveUrlMemoryCache = stored;
+    return stored;
   }
 
   /**
    * Memperbarui URL Google Drive tujuan pengumpulan
    */
   public static async setDriveUrl(url: string): Promise<void> {
-    await safeSet(STORAGE_KEYS.DRIVE_URL, url.trim());
+    const cleanUrl = url.trim() || DEFAULT_DRIVE_URL;
+    this.driveUrlMemoryCache = cleanUrl;
+    await safeSet(STORAGE_KEYS.DRIVE_URL, cleanUrl);
   }
 
   /**

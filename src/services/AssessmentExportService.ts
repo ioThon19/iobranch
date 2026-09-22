@@ -83,9 +83,9 @@ export class AssessmentExportService {
   }
 
   /**
-   * Mengirim data formatif ke Google Drive guru via Web Share API native atau unduhan lokal (.txt)
+   * Mengirim data formatif ke Google Drive guru via unduhan lokal (.txt) dan pembukaan tautan Google Drive
    */
-  public static async exportToDrive(customDriveUrl?: string): Promise<ExportResult> {
+  public static async exportToDrive(customDriveUrl?: string, preOpenedWindow?: Window | null): Promise<ExportResult> {
     const targetUrl = customDriveUrl || (await StorageService.getDriveUrl());
     const { filename, content } = await this.generateTextData();
 
@@ -100,32 +100,8 @@ export class AssessmentExportService {
     }
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-    const file = new File([blob], filename, { type: 'text/plain' });
 
-    // Jalur Utama: Web Share API untuk ponsel (Android / iOS)
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: 'Laporan Formatif iobranch',
-          text: `Laporan hasil belajar formatif pasangan murid ${filename}`
-        });
-        if (targetUrl) {
-          window.open(targetUrl, '_blank');
-        }
-        return {
-          filename,
-          content,
-          methodUsed: 'web-share',
-          success: true,
-          message: 'Berhasil membagikan berkas laporan ke Google Drive.'
-        };
-      } catch {
-        // Jika dibatalkan oleh pengguna, beralih ke jalur unduhan langsung
-      }
-    }
-
-    // Jalur Cadangan: Unduh berkas .txt secara langsung dan buka tautan Google Drive guru di tab baru
+    // Unduh berkas .txt secara langsung ke perangkat murid
     const objectUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement('a');
     downloadLink.href = objectUrl;
@@ -135,8 +111,21 @@ export class AssessmentExportService {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(objectUrl);
 
+    // Navigasikan atau buka tautan Google Drive guru di tab baru
     if (targetUrl) {
-      window.open(targetUrl, '_blank');
+      if (preOpenedWindow && !preOpenedWindow.closed) {
+        try {
+          preOpenedWindow.location.href = targetUrl;
+        } catch {
+          // Abaikan jika ada pembatasan cross-origin
+        }
+      } else {
+        try {
+          window.open(targetUrl, '_blank', 'noopener,noreferrer');
+        } catch {
+          // Abaikan jika pemblokir popup aktif
+        }
+      }
     }
 
     return {
@@ -144,7 +133,7 @@ export class AssessmentExportService {
       content,
       methodUsed: 'download-fallback',
       success: true,
-      message: 'Berkas laporan .txt berhasil diunduh. Tautan Google Drive Guru dibuka pada tab baru.'
+      message: 'Berkas laporan .txt berhasil diunduh dan Folder Google Drive Guru dibuka.'
     };
   }
 }
