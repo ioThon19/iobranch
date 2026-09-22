@@ -63,12 +63,12 @@ export class BattleScene extends Phaser.Scene {
     if (this.enemySprite) {
       this.enemySprite.setAlpha(1);
       this.enemySprite.clearTint();
-      this.enemySprite.setPosition(380, 105);
+      this.enemySprite.setPosition(325, 88);
     }
     if (this.heroSprite) {
       this.heroSprite.setAlpha(1);
       this.heroSprite.clearTint();
-      this.heroSprite.setPosition(100, 150);
+      this.heroSprite.setPosition(100, 159);
     }
   }
 
@@ -583,7 +583,7 @@ export class BattleScene extends Phaser.Scene {
       alpha: 0,
       duration: 600,
       onComplete: () => {
-        const victoryBanner = this.add.text(240, 135, '[ VICTORY! +50 XP ]', {
+        const victoryBanner = this.add.text(240, 135, '[ KEMENANGAN TELAK! ]', {
           fontFamily: '"Press Start 2P", monospace',
           fontSize: '11px',
           color: '#f59e0b',

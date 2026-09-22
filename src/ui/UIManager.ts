@@ -525,7 +525,7 @@ export class UIManager {
         window.setTimeout(() => {
           this.showCelebrationModal(
             'Mode Latihan Tantangan',
-            'Anda telah menyelesaikan misi Tantangan ini sebelumnya. Anda dipersilakan berlatih kembali untuk mengasah pemahaman evaluasi kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi Anda.',
+            'Kalian telah menyelesaikan misi Tantangan ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman evaluasi kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian.',
             [
               {
                 label: 'Mulai Latihan Mandiri',
@@ -661,6 +661,7 @@ export class UIManager {
       void (async () => {
         this.allModuleProgress = await StorageService.getAllProgress();
         this.render();
+        this.scrollToTop();
       })();
     }
 
@@ -671,6 +672,43 @@ export class UIManager {
     this.renderGlobalHeader();
     this.renderGlobalFooter();
     this.render();
+    this.scrollToTop();
+    requestAnimationFrame(() => {
+      this.scrollToTop();
+    });
+  }
+
+  /**
+   * Mengembalikan posisi scroll seluruh kontainer UI ke tampilan awal paling atas (Scroll Restoration).
+   * Memastikan ketika murid berpindah halaman atau aktivitas belajar, tampilan selalu dimulai dari awal.
+   */
+  public scrollToTop(): void {
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    } catch {
+      window.scrollTo(0, 0);
+    }
+    if (document.documentElement) document.documentElement.scrollTop = 0;
+    if (document.body) document.body.scrollTop = 0;
+
+    const mainWorkspace = document.getElementById('main-workspace');
+    if (mainWorkspace) {
+      mainWorkspace.scrollTop = 0;
+    }
+
+    if (this.overlayContainer) {
+      this.overlayContainer.scrollTop = 0;
+    }
+
+    const screenWrapper = this.overlayContainer?.querySelector('.screen-content-wrapper') as HTMLElement | null;
+    if (screenWrapper) {
+      screenWrapper.scrollTop = 0;
+    }
+
+    const contentCard = document.querySelector('.materi-content-card') as HTMLElement | null;
+    if (contentCard) {
+      contentCard.scrollTop = 0;
+    }
   }
 
   /**
@@ -1195,7 +1233,7 @@ export class UIManager {
         'Apakah kalian yakin ingin mengganti akun tim belajar? Data progres yang telah dicapai tetap tersimpan di penyimpanan perangkat lokal.',
         [
           {
-            label: 'YA, GANTI TIM',
+            label: 'Ganti Tim',
             isPrimary: true,
             action: async () => {
               await StorageService.clearSession();
@@ -1204,7 +1242,7 @@ export class UIManager {
             }
           },
           {
-            label: 'BATALKAN',
+            label: 'Batalkan',
             isPrimary: false,
             action: () => { }
           }
@@ -1711,6 +1749,18 @@ export class UIManager {
       const s1Absen = parseInt((modalContent.querySelector('#input-s1-absen') as HTMLInputElement).value, 10) || 1;
       const s2Name = (modalContent.querySelector('#input-s2-name') as HTMLInputElement).value.trim();
       const s2Absen = parseInt((modalContent.querySelector('#input-s2-absen') as HTMLInputElement).value, 10) || 2;
+
+      if (s1Name.length < 2 || s2Name.length < 2) {
+        soundFx.playLogicFalse();
+        this.showRetroToast('Nama lengkap kedua murid minimal 2 karakter!', false);
+        return;
+      }
+      if (s1Absen === s2Absen) {
+        soundFx.playLogicFalse();
+        this.showRetroToast('Nomor absen Murid 1 dan Murid 2 tidak boleh sama!', false);
+        return;
+      }
+
       const symbol = ((modalContent.querySelector('input[name="symbol"]:checked') as HTMLInputElement)?.value || 'algoritma') as TeamSymbol;
 
       const autoPairId = `Tim Absen ${String(s1Absen).padStart(2, '0')}-${String(s2Absen).padStart(2, '0')}`;
@@ -1732,7 +1782,7 @@ export class UIManager {
       this.progressionState = await StorageService.getProgressionState();
       soundFx.playLogicTrue();
       closeModal();
-      this.showRetroToast('Pendaftaran Berhasil! Selamat datang di Kota Harmoni. Temui Pak Budi di SMA Harmoni!', true);
+      this.showRetroToast(`Pendaftaran berhasil! Selamat bergabung di Kota Harmoni, ${autoPairId}. Temui Pak Budi di SMA Harmoni!`, true);
       this.setScreen('OVERWORLD');
     });
 
@@ -1833,7 +1883,7 @@ export class UIManager {
       activeStepNum = '05';
       activeMissionTitle = 'Misi Kota Harmoni Selesai dengan Gemilang!';
       activeLocation = 'Balai Kota & Arsip Capaian';
-      activeDesc = 'Seluruh langkah pembelajaran telah kalian tuntaskan bersama pasangan tim! Buka menu Progres untuk melihat total XP, lencana tim, dan mengekspor bukti laporan belajar.';
+      activeDesc = 'Seluruh langkah pembelajaran telah kalian tuntaskan bersama pasangan tim! Buka menu Progres untuk melihat nilai formatif, lencana tim, dan mengekspor bukti laporan belajar.';
       primaryBtnLabel = 'Lihat Rekap Capaian Tim';
       primaryBtnIcon = 'trophy';
       primaryBtnScreen = 'PROGRES';
@@ -2048,7 +2098,7 @@ export class UIManager {
             </div>
             <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px;">
               ${isBattleUnlocked
-        ? 'Tantang Bug Monster dengan keputusan logika yang tepat dan raih poin XP tim.'
+        ? 'Tantang Bug Monster dengan keputusan logika yang tepat untuk meningkatkan skor tantangan tim.'
         : 'Buktikan minimal satu cabang kondisi di Lab Telusur untuk membuka gerbang pertempuran.'
       }
             </p>
@@ -2168,7 +2218,7 @@ export class UIManager {
           </div>
           <div>
             <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
-              Sesi Pembimbingan Tim: ${pairName}
+              Sesi Pembimbingan: ${pairName}
             </div>
             <div style="font-size: 11.5px; color: var(--text-secondary);">
               Kolaborasi Penyelidik: <strong style="color: var(--primary); font-weight: 600;">${student1Name}</strong> &amp; <strong style="color: var(--primary); font-weight: 600;">${student2Name}</strong>
@@ -2213,7 +2263,7 @@ export class UIManager {
               ${renderPixelIcon('chat', 11, 'var(--primary)')} Arahan Orientasi Masalah:
             </div>
             <p style="font-size: 13.5px; line-height: 1.65; color: var(--text-primary); margin-bottom: 8px;">
-              "Selamat datang di Kota Harmoni, ${pairName}! Kota kita sedang menghadapi kendala otomasi. Sejumlah fasilitas cerdas mengalami gangguan fungsi karena program komputernya salah mengambil keputusan logika."
+              "Selamat datang di Kota Harmoni, rekan-rekan ${pairName}! Kota kita sedang menghadapi kendala otomasi. Sejumlah fasilitas cerdas mengalami gangguan fungsi karena program komputernya salah mengambil keputusan logika."
             </p>
             <p style="font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); margin: 0;">
               "Dalam komputer, keputusan diambil dari evaluasi ekspresi kondisi: bernilai <strong>BENAR (TRUE)</strong> atau <strong>SALAH (FALSE)</strong>. Mari cermati 5 masalah di lapangan berikut ini sebelum memulai penyelidikan!"
@@ -2403,7 +2453,7 @@ export class UIManager {
           <!-- Peta Langkah Penyelidikan (Roadmap) -->
           <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 16px; background: var(--surface-panel-alt);">
             <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-              ${renderPixelIcon('map', 13, 'var(--primary)')} Agenda Penyelidikan ${pairName}:
+              ${renderPixelIcon('map', 13, 'var(--primary)')} Agenda Penyelidikan: ${pairName}
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 11.5px;">
               <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
@@ -2678,6 +2728,7 @@ export class UIManager {
         soundFx.playButtonBlip();
         this.activeMateriId = topic.id;
         this.render();
+        this.scrollToTop();
       });
       listPrasyarat?.appendChild(btn);
     });
@@ -2709,6 +2760,7 @@ export class UIManager {
         }
         this.activeMateriId = topic.id;
         this.render();
+        this.scrollToTop();
       });
       listPercabangan?.appendChild(btn);
     });
@@ -3317,6 +3369,7 @@ export class UIManager {
         soundFx.playButtonBlip();
         this.activeMateriId = MATERI_BANK[currentIndex - 1]!.id;
         this.render();
+        this.scrollToTop();
       }
     });
 
@@ -3327,10 +3380,12 @@ export class UIManager {
           soundFx.playLogicFalse();
           this.activeMateriId = nextTopic.id;
           this.render();
+          this.scrollToTop();
         } else {
           soundFx.playButtonBlip();
           this.activeMateriId = nextTopic.id;
           this.render();
+          this.scrollToTop();
         }
       }
     });
@@ -3345,7 +3400,7 @@ export class UIManager {
       await StorageService.saveProgressionState({ stepMaterialCompleted: true });
       this.progressionState = await StorageService.getProgressionState();
       this.renderGlobalHeader();
-      this.showRetroToast('Konsep dipahami! Langkah 3: Lab Telusur Kode telah terbuka.', true);
+      this.showRetroToast('Pemahaman materi tercatat! Langkah 2: Meja Kerja Lab Telusur Kode telah terbuka.', true);
       this.setScreen('TRACING');
     });
 
@@ -3519,6 +3574,7 @@ export class UIManager {
         };
         this.coverageView.update(prog, found.id, this.formativeScores?.tracingScore || 0, this.isCycle2Unlocked);
         this.render();
+        this.scrollToTop();
       }
     });
 
@@ -3597,7 +3653,7 @@ export class UIManager {
           ${this.activeModule.inputLabel}:
         </label>
         <div style="display: flex; gap: 10px;">
-          <input id="input-trace-val" type="text" class="pixel-input" value="${this.isInputApplied ? this.currentInputValue : ''}" style="flex: 1; min-height: 44px;" placeholder="Contoh: ${this.activeModule.defaultInput} (Ketik nilai uji)" />
+          <input id="input-trace-val" type="text" class="pixel-input" value="${this.isInputApplied ? this.currentInputValue : ''}" style="flex: 1; min-height: 44px;" placeholder="(Masukan nilai uji)" />
           <button id="btn-apply-input" type="button" class="game-btn ${this.isInputApplied ? 'game-btn-secondary' : 'game-btn-primary'}" style="min-height: 44px; padding: 0 16px; font-size: 12px;">
             Set Uji
           </button>
@@ -3644,7 +3700,8 @@ export class UIManager {
         </div>
         <button id="btn-jump-to-workbench" type="button" class="game-btn game-btn-primary tracing-hypothesis-highlight-btn" style="${(this.userPrediction && this.isInputApplied) ? 'display: inline-flex;' : 'display: none;'}">
           ${renderPixelIcon('flask', 13, '#ffffff')}
-          <span>Uji Dugaan: Cabang ${this.userPrediction || ''} di Meja Kerja &rarr;</span>
+          <span>Uji Dugaan: Cabang ${this.userPrediction || ''} di Meja Kerja</span>
+          ${renderPixelIcon('arrow-right', 12, '#ffffff')}
         </button>
       </div>
     `;
@@ -3973,7 +4030,7 @@ export class UIManager {
       const btnJump = heroCard.querySelector<HTMLButtonElement>('#btn-jump-to-workbench');
       if (btnJump) {
         if (this.userPrediction && this.isInputApplied) {
-          btnJump.innerHTML = `${renderPixelIcon('flask', 13, '#ffffff')} <span>Uji Dugaan: Cabang ${this.userPrediction} di Meja Kerja &rarr;</span>`;
+          btnJump.innerHTML = `${renderPixelIcon('flask', 13, '#ffffff')} <span>Uji Dugaan: Cabang ${this.userPrediction} di Meja Kerja</span> ${renderPixelIcon('arrow-right', 12, '#ffffff')}`;
           btnJump.style.display = 'inline-flex';
         } else {
           btnJump.style.display = 'none';
@@ -4512,7 +4569,7 @@ export class UIManager {
       soundFx.playVictoryFanfare();
       this.showCelebrationModal(
         'Semua Jalur Kondisi Berhasil Diuji!',
-        `Luar biasa! Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada studi kasus ${this.activeModule.title}. Tim kalian mendapat Bintang 2 dan bonus +100 XP!`,
+        `Luar biasa! Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada studi kasus ${this.activeModule.title}. Tim kalian berhasil meraih 2 Bintang sempurna!`,
         [
           {
             label: 'Lanjut ke Arena Tantangan',
@@ -4527,9 +4584,9 @@ export class UIManager {
         ]
       );
     } else if (stars >= 1 && oldProg.stars < 1) {
-      this.showRetroToast('Pengujian cabang berhasil dicatat! Bintang 1 (+50 XP) diperoleh. Arena Tantangan kini telah terbuka.', true);
-    } else if (addedXp > 0) {
-      this.showRetroToast(`Capaian bintang bertambah! +${addedXp} XP diperoleh.`, true);
+      this.showRetroToast('Pengujian cabang berhasil dicatat! Bintang 1 berhasil diraih. Arena Tantangan kini telah terbuka.', true);
+    } else if (stars > oldProg.stars) {
+      this.showRetroToast('Capaian bintang bertambah! Nilai pemahaman formatif kalian meningkat.', true);
     }
   }
 
@@ -4646,7 +4703,7 @@ export class UIManager {
             HP Pemain: <strong id="battle-player-hp">${this.playerHp}</strong>/${this.maxPlayerHp}
           </span>
           <span class="badge-pill" style="color: ${this.isBattlePracticeMode ? 'var(--text-muted)' : 'var(--success)'}; font-weight: bold; font-size: 11px; border-color: ${this.isBattlePracticeMode ? 'var(--border-subtle)' : 'rgba(21, 128, 61, 0.4)'}; background: ${this.isBattlePracticeMode ? 'var(--surface-panel-alt)' : 'rgba(21, 128, 61, 0.1)'};">
-            ${this.isBattlePracticeMode ? 'Mode Latihan (0 XP)' : '+50 XP'}
+            ${this.isBattlePracticeMode ? 'Mode Latihan' : 'Tantangan Formatif'}
           </span>
         </div>
       </div>
@@ -4821,12 +4878,7 @@ export class UIManager {
       // Sesi selesai, murid diizinkan keluar ke halaman lain (Requirement 3)
       this.isBattleSessionActive = false;
 
-      // Poin XP hanya diberikan pada penyelesaian pertama kali (bukan mode latihan)
       const isFirstClear = !this.isBattlePracticeMode;
-      if (isFirstClear && this.session) {
-        this.session.totalXp += 50;
-        void StorageService.saveSession(this.session);
-      }
 
       // Rekam nilai tantangan resmi pada percobaan pertama (First-Attempt Lock)
       void StorageService.recordFirstAttemptBattle(100).then((scores) => {
@@ -4873,8 +4925,8 @@ export class UIManager {
 
       const victoryTitle = isFirstClear ? 'Kemenangan Tempur Tercapai!' : 'Latihan Mandiri Selesai!';
       const victoryMessage = isFirstClear
-        ? 'Luar biasa! Bug Monster berhasil dikalahkan melalui 5 ronde evaluasi kondisi percabangan. Langkah 5: Evaluasi Mandiri kini telah terbuka! Tim memperoleh +50 XP!'
-        : 'Luar biasa! Bug Monster berhasil dikalahkan kembali dalam mode latihan. Pemahaman logika percabangan Anda semakin kokoh! (Mode Latihan: +0 XP).';
+        ? 'Luar biasa! Bug Monster berhasil dikalahkan melalui 5 ronde evaluasi kondisi percabangan. Langkah 5: Evaluasi Mandiri kini telah terbuka! Skor tantangan tim tercatat 100.'
+        : 'Luar biasa! Bug Monster berhasil dikalahkan kembali dalam mode latihan. Pemahaman logika percabangan kalian semakin kokoh!';
 
       this.showCelebrationModal(
         victoryTitle,
@@ -5025,23 +5077,23 @@ export class UIManager {
         code: `int suhuRuang = 27;\nbool kipasMenyala = (suhuRuang >= 30);`,
         options: [
           'true karena suhuRuang mendekati batas target 30 derajat',
-          'false karena kondisi 27 >= 30 bernilai salah (tidak terpenuhi)',
           'true karena variabel kipasMenyala bertipe boolean positif',
+          'false karena kondisi 27 >= 30 bernilai salah (tidak terpenuhi)',
           'Error kompilasi karena perbandingan >= memerlukan tanda kurung siku'
         ],
-        correctIndex: 1,
+        correctIndex: 2,
         explanation: 'Kondisi 27 >= 30 bernilai SALAH (false) karena angka 27 lebih kecil dari 30. Oleh karena itu, variabel kipasMenyala bernilai false dan kipas pendingin tetap padam.'
       },
       {
         question: 'Pada program kasir toko alat tulis berikut, berapakah nilai akhir dari variabel bayar setelah dieksekusi?',
         code: `int totalBelanja = 45000;\nint potonganHarga = 0;\n\nif (totalBelanja >= 50000) {\n    potonganHarga = 10000;\n}\nint bayar = totalBelanja - potonganHarga;`,
         options: [
-          '35000 rupiah karena mendapat potongan harga otomatis 10000 rupiah',
           '45000 rupiah karena blok percabangan IF dilewati saat kondisi bernilai salah',
+          '35000 rupiah karena mendapat potongan harga otomatis 10000 rupiah',
           '0 rupiah karena total belanja belum mencapai batas minimum diskon',
           '55000 rupiah karena variabel potonganHarga ditambahkan ke belanja'
         ],
-        correctIndex: 1,
+        correctIndex: 0,
         explanation: 'Karena totalBelanja (45.000) tidak memenuhi syarat (>= 50.000), kondisi bernilai false sehingga blok kurung kurawal IF dilewati (skipped). Nilai potonganHarga tetap 0, dan bayar = 45.000 - 0 = 45.000.'
       },
       {
@@ -5061,24 +5113,24 @@ export class UIManager {
         code: `int tinggiBadan = 115;\nif (tinggiBadan > 120) {\n    statusTiket = "TIKET DEWASA";\n} else {\n    statusTiket = "TIKET ANAK";\n}`,
         options: [
           'Persegi Panjang (Proses), melalui jalur Benar (True)',
-          'Belah Ketupat (Decision/Keputusan), melalui jalur Salah (False / ELSE)',
           'Jajaran Genjang (Input/Output), melalui jalur Benar (True)',
-          'Oval (Terminator), melalui jalur Salah (False / ELSE)'
+          'Oval (Terminator), melalui jalur Salah (False / ELSE)',
+          'Belah Ketupat (Decision/Keputusan), melalui jalur Salah (False / ELSE)'
         ],
-        correctIndex: 1,
+        correctIndex: 3,
         explanation: 'Dalam standar diagram alir (flowchart), pengecekan kondisi selalu digambarkan dengan Belah Ketupat (Decision Diamond). Karena 115 > 120 bernilai FALSE, eksekusi mengalir ke cabang ELSE ("TIKET ANAK").'
       },
       {
-        question: 'Pengembang menguji fungsi saldo dompet digital berikut dengan input nominalIsi = 50000. Mengapa pengujian ini belum memenuhi 100% Branch Coverage (Bintang 2)?',
+        question: 'Program isi saldo dompet digital di bawah ini baru diuji satu kali dengan masukan nominalIsi = 50000. Mengapa pengujian tersebut belum cukup untuk memastikan seluruh jalur percabangan bekerja dengan benar?',
         code: `if (nominalIsi >= 20000) {\n    statusTransaksi = "BERHASIL";\n} else {\n    statusTransaksi = "DITOLAK_MINIMUM_20RB";\n}`,
         options: [
-          'Pengujian harus selalu memasukkan angka nol sebanyak tiga kali berturut-turut',
-          'Pengujian baru menguji cabang Benar (IF), sedangkan cabang Salah (ELSE) belum pernah divalidasi',
-          'Nominal 50.000 terlalu besar untuk diproses oleh variabel bertipe integer',
-          'Branch Coverage hanya berlaku pada program yang memiliki instruksi perulangan (looping)'
+          'Pengujian harus selalu menggunakan angka kelipatan sepuluh ribu',
+          'Pengujian baru membuktikan jalur Benar (IF), sedangkan jalur Salah (ELSE) belum pernah diuji',
+          'Nominal 50.000 terlalu besar untuk disimpan dalam variabel angka',
+          'Pengujian seluruh jalur percabangan hanya perlu dilakukan jika program memiliki perulangan (looping)'
         ],
         correctIndex: 1,
-        explanation: 'Target 100% Branch Coverage (Bintang 2) mewajibkan SEMUA kemungkinan cabang (cabang IF dan cabang ELSE) teruji. Masukan 50.000 hanya menguji cabang IF; cabang ELSE baru teruji jika diberi masukan di bawah 20.000 (misal 10.000).'
+        explanation: 'Untuk memastikan program benar-benar andal, seluruh kemungkinan jalur keputusan harus diuji. Nilai masukan 50.000 baru menguji jalur Benar (IF). Agar pengujian tuntas, tim kalian juga perlu menguji jalur Salah (ELSE) dengan masukan di bawah 20.000 (misalnya 10.000).'
       }
     ];
 
@@ -5258,10 +5310,6 @@ export class UIManager {
       if (this.selectedAnswer === currentQ.correctIndex) {
         this.evaluasiCorrectCount++;
         soundFx.playLogicTrue();
-        if (!this.isEvaluasiPracticeMode && this.session) {
-          this.session.totalXp += 20;
-          void StorageService.saveSession(this.session);
-        }
       } else {
         soundFx.playLogicFalse();
       }
@@ -5291,7 +5339,7 @@ export class UIManager {
 
         const modalTitle = isFirst ? 'Evaluasi Formatif Selesai!' : 'Latihan Evaluasi Selesai!';
         const modalMessage = isFirst
-          ? `Luar biasa! Tim ${this.session?.pairId || ''} telah menyelesaikan 5 butir soal evaluasi pemahaman dengan skor ${currentScore} / 100. Nilai resmi formatif ini telah terkunci. Dasbor Capaian Belajar kini telah terbuka penuh!`
+          ? `Luar biasa! ${this.session?.pairId || 'Tim belajar kalian'} telah menyelesaikan 5 butir soal evaluasi pemahaman dengan skor ${currentScore} / 100. Nilai resmi formatif ini telah terkunci. Dasbor Capaian Belajar kini telah terbuka penuh!`
           : `Latihan selesai! Skor perolehan pengerjaan kali ini adalah ${currentScore} / 100. Catatan: Nilai formatif resmi tim kalian (${updatedScores.evaluasiScore} / 100) dari percobaan pertama tetap tersimpan aman.`;
 
         this.showCelebrationModal(
@@ -5318,6 +5366,7 @@ export class UIManager {
       this.answerSubmitted = false;
       soundFx.playButtonBlip();
       this.render();
+      this.scrollToTop();
     });
 
     container.appendChild(questionCard);
@@ -5376,7 +5425,7 @@ export class UIManager {
         </div>
         <div style="flex: 1; min-width: 0; width: 100%;">
           <div style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
-            Tim: ${this.session ? `${this.session.pairId} (${this.session.student1Name} &amp; ${this.session.student2Name})` : 'Tim Belajar Murid'}
+            ${this.session ? `${this.session.pairId} (${this.session.student1Name} &amp; ${this.session.student2Name})` : 'Tim Belajar Murid'}
           </div>
           <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <span>Status: <strong style="color: ${formative.finalScore >= 75 ? 'var(--success)' : 'var(--warning-dark)'};">${formative.finalScore >= 75 ? 'Tuntas Memenuhi KKM' : 'Sedang Berproses'}</strong></span>
@@ -5415,7 +5464,7 @@ export class UIManager {
           <div class="tactile-card" style="padding: 12px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
             <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">1. Lab Telusur</div>
             <div style="font-family: var(--font-code); font-size: 20px; font-weight: 800; color: var(--primary);">${formative.tracingScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
-            <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 2px;">Target Bintang 2</div>
+            <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 2px;">${StorageService.getTracingStars(formative.tracingScore, this.isCycle2Unlocked)} dari 2 Bintang</div>
           </div>
 
           <!-- Pilar 2: Tantangan -->
@@ -5442,7 +5491,7 @@ export class UIManager {
       </div>
 
       <!-- Bilah Tab Navigasi Dasbor Progres -->
-      <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-retro); padding-bottom: 8px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-retro); padding: 8px 4px 10px 4px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none;">
         <button id="tab-btn-badges" type="button" class="game-btn ${this.activeProgressTab === 'BADGES' ? 'game-btn-primary' : 'game-btn-secondary'}" style="font-size: 12px; min-height: 38px; padding: 6px 14px; gap: 6px; flex-shrink: 0; white-space: nowrap;">
           ${renderPixelIcon('trophy', 13, 'currentColor')} Lencana Pencapaian
         </button>
@@ -5529,6 +5578,13 @@ export class UIManager {
             const isLocked = m.cycleRequired === 2 && !this.isCycle2Unlocked;
             const prog = this.allModuleProgress[m.id];
             const stars = prog?.stars || 0;
+            let weight = 0;
+            if (this.isCycle2Unlocked) {
+              weight = idx === 0 ? 15 : (idx === 1 ? 15 : (idx === 2 ? 20 : 25));
+            } else {
+              weight = idx === 0 ? 30 : (idx === 1 ? 30 : (idx === 2 ? 40 : 0));
+            }
+            const isDone = (prog?.testedBranches?.length || 0) >= 1 || !!prog?.isCompleted;
             return `
               <div class="pixel-card-alt" style="padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div>
@@ -5536,7 +5592,7 @@ export class UIManager {
                     ${isLocked ? '[TERKUNCI] ' : ''}MODUL ${idx + 1}: ${m.title}
                   </div>
                   <div style="font-size: 12px; color: var(--text-secondary);">
-                    ${isLocked ? 'Siklus 2: Memerlukan Token Kelas dari Guru' : 'Target: Menguji semua jalur kondisi percabangan'}
+                    ${isLocked ? 'Siklus 2: Memerlukan Token Kelas dari Guru' : `Bobot: <strong>${weight} Poin</strong> • Status: <span style="color: ${isDone ? 'var(--success)' : 'var(--text-muted)'}; font-weight: 600;">${isDone ? 'Tuntas Diselesaikan' : 'Belum Diuji'}</span>`}
                   </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
@@ -5805,7 +5861,9 @@ export class UIManager {
     backdrop.style.cssText = `
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background-color: rgba(5, 8, 14, 0.88);
+      background-color: rgba(28, 25, 23, 0.75);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -6183,7 +6241,9 @@ export class UIManager {
     backdrop.style.cssText = `
       position: fixed;
       top: 0; left: 0; width: 100%; height: 100%;
-      background-color: rgba(5, 8, 14, 0.88);
+      background-color: rgba(28, 25, 23, 0.75);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -6262,6 +6322,7 @@ export class UIManager {
       const isValid = await CycleGuard.verifyStudentToken(val);
       if (isValid) {
         this.isCycle2Unlocked = true;
+        this.formativeScores = await StorageService.getFormativeScores();
         backdrop.remove();
 
         if (targetModuleId) {

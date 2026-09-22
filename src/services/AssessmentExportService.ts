@@ -21,9 +21,9 @@ export class AssessmentExportService {
     const cleanPairId = session?.pairId
       ? session.pairId.replace(/\s+/g, '_')
       : `Absen${String(session?.student1Absen || 0).padStart(2, '0')}-${String(session?.student2Absen || 0).padStart(2, '0')}`;
-    const s1 = session?.student1Name ? session.student1Name.replace(/[^a-zA-Z0-9]/g, '') : 'S1';
-    const s2 = session?.student2Name ? session.student2Name.replace(/[^a-zA-Z0-9]/g, '') : 'S2';
-    const filename = `iobranch_S${cycle}_${cleanPairId}_${s1}_${s2}.csv`;
+    const s1 = session?.student1Name ? session.student1Name.replace(/[^a-zA-Z0-9]/g, '') : 'M1';
+    const s2 = session?.student2Name ? session.student2Name.replace(/[^a-zA-Z0-9]/g, '') : 'M2';
+    const filename = `iobranch_Siklus${cycle}_${cleanPairId}_${s1}_${s2}.csv`;
 
     let totalStars = 0;
     let completedModulesCount = 0;

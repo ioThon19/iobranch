@@ -1,5 +1,6 @@
-// src/ui/CoverageView.ts - Pelacak Cakupan Cabang 2 Bintang & Progres XP (SSOT: DESIGN.md & antislop-ui)
+// src/ui/CoverageView.ts - Pelacak Cakupan Cabang 2 Bintang & Progres Formatif (SSOT: DESIGN.md & antislop-ui)
 import { ModuleProgress } from '../types/session.types';
+import { StorageService } from '../services/StorageService';
 import { renderPixelIcon } from './UIManager';
 
 export interface ModuleBranchDefinition {
@@ -81,7 +82,6 @@ export class CoverageView {
 
   public render(): HTMLElement {
     const branchDefs = MODULE_BRANCHES[this.moduleId] || MODULE_BRANCHES['m01']!;
-    const stars = this.progress.stars;
     const cycleLabel = this.isCycle2 ? 'Siklus 2' : 'Siklus 1';
 
     const pillsHtml = branchDefs
@@ -111,14 +111,42 @@ export class CoverageView {
       })
       .join('');
 
-    const allDone = stars >= 2;
-    const targetGuideHtml = allDone
-      ? `<div style="font-size: 11px; color: var(--success); font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-          ${renderPixelIcon('check', 12, 'var(--success)')} Luar biasa! Seluruh cabang logika pada kasus ini telah berhasil dibuktikan (Bintang 2 Tuntas).
-        </div>`
-      : `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
-          Target: Buktikan seluruh cabang logika (${branchDefs.map(b => b.id).join(' & ')}) untuk meraih 2 Bintang Capaian (100% Branch Coverage).
+    const tracingStars = StorageService.getTracingStars(this.tracingScore, this.isCycle2);
+
+    let targetGuideHtml = '';
+    if (this.isCycle2) {
+      if (tracingStars >= 2) {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--success); font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+          ${renderPixelIcon('check', 12, 'var(--success)')} Luar biasa! Seluruh 5 kasus Siklus 2 telah berhasil diselesaikan (100/100, Bintang 2 Tuntas Penuh).
         </div>`;
+      } else if (tracingStars >= 1) {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--primary); margin-bottom: 8px; line-height: 1.4;">
+          Capaian: Bintang 1 Diraih! Tuntaskan Modul 4 &amp; 5 untuk meraih Bintang 2 (Nilai 100/100).
+        </div>`;
+      } else {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
+          Target: Tuntaskan minimal 3 kasus untuk meraih Bintang 1, dan seluruh 5 kasus untuk Bintang 2 (100/100).
+        </div>`;
+      }
+    } else {
+      if (tracingStars >= 2) {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--success); font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+          ${renderPixelIcon('check', 12, 'var(--success)')} Luar biasa! Seluruh 3 kasus wajib telah diselesaikan dengan benar (Nilai 100/100, Bintang 2 Tuntas Penuh).
+        </div>`;
+      } else if (tracingStars >= 1) {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--primary); margin-bottom: 8px; line-height: 1.4;">
+          Capaian: Kasus 1 &amp; 2 tuntas (Bintang 1 Diraih, 60 Poin). Tuntaskan Kasus 3 (Bobot 40 Poin) untuk meraih Bintang 2 (100/100)!
+        </div>`;
+      } else if (this.tracingScore >= 30) {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
+          Capaian: Kasus 1 tuntas (30 Poin). Selesaikan Kasus 2 (Bobot 30 Poin) untuk meraih Bintang 1 (60 Poin)!
+        </div>`;
+      } else {
+        targetGuideHtml = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
+          Target: Selesaikan Kasus 1 (30 Poin) &amp; Kasus 2 (30 Poin) untuk Bintang 1, lalu Kasus 3 (40 Poin) untuk Bintang 2 (100/100).
+        </div>`;
+      }
+    }
 
     this.container.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -126,11 +154,11 @@ export class CoverageView {
           PROGRES UJI JALUR KONDISI
         </span>
         <div class="stars-display" style="font-family: var(--font-code); font-size: 11px; font-weight: bold; display: flex; gap: 8px;">
-          <span style="color: ${stars >= 1 ? 'var(--warning)' : 'var(--text-muted)'}; display: inline-flex; align-items: center; gap: 4px;">
-            ${renderPixelIcon('star', 12, stars >= 1 ? 'var(--warning)' : 'var(--text-muted)')} BINTANG 1
+          <span style="color: ${tracingStars >= 1 ? 'var(--warning)' : 'var(--text-muted)'}; display: inline-flex; align-items: center; gap: 4px;">
+            ${renderPixelIcon('star', 12, tracingStars >= 1 ? 'var(--warning)' : 'var(--text-muted)')} BINTANG 1
           </span>
-          <span style="color: ${stars >= 2 ? 'var(--warning)' : 'var(--text-muted)'}; display: inline-flex; align-items: center; gap: 4px;">
-            ${renderPixelIcon('star', 12, stars >= 2 ? 'var(--warning)' : 'var(--text-muted)')} BINTANG 2
+          <span style="color: ${tracingStars >= 2 ? 'var(--warning)' : 'var(--text-muted)'}; display: inline-flex; align-items: center; gap: 4px;">
+            ${renderPixelIcon('star', 12, tracingStars >= 2 ? 'var(--warning)' : 'var(--text-muted)')} BINTANG 2
           </span>
         </div>
       </div>
@@ -152,7 +180,7 @@ export class CoverageView {
         ${pillsHtml}
       </div>
 
-      <!-- Bar Skor Formatif 1-100 (Pengganti Total XP Praktikum) -->
+      <!-- Bar Skor Formatif 1-100 Penelusuran Logika -->
       <div class="score-bar-wrapper">
         <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--text-secondary);">
           <span style="font-weight: 600;">Skor Akumulasi Telusur (${cycleLabel})</span>

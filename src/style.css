@@ -13,6 +13,9 @@
   /* Warm Amber / Terracotta */
   --secondary-hover: #b45309;
 
+  --accent: var(--primary);
+  /* Aksen Resmi Harmonis */
+
   --success: #15803d;
   /* Crisp Emerald Green */
   --success-hover: #166534;
@@ -628,10 +631,10 @@ kbd,
   font-family: var(--font-code);
   font-size: 11px;
   font-weight: 600;
-  color: #1e293b;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-bottom: 2px solid #94a3b8;
+  color: var(--text-primary);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-bottom: 2px solid var(--border-retro);
   border-radius: 4px;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
   line-height: 1.35;

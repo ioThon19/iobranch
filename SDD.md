@@ -2,11 +2,11 @@
 ## iobranch — Interactive 2D Pixel Art Logic Tracer PWA
 
 **Nama Produk**: iobranch  
-**Versi Dokumen**: 1.0.0  
+**Versi Dokumen**: 2.0.0 (Sinkronisasi Arsitektur Nyata & Standar Rekayasa Anti-Slop)  
 **Status**: Approved Architecture Blueprint  
 **Arsitek Sistem**: Lead Educational Game Architect & Software Engineer  
 **Standar Rekayasa & Desain**: Standar Anti-Slop ([github.com/miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop))  
-**Target Riset Tindakan**: Penelitian Tindakan Kelas (PTK) Informatika Kelas X-10 (46 Murid)  
+**Target Riset Tindakan**: Penelitian Tindakan Kelas (PTK) Informatika Kelas X-10 (46 Murid, 23 Pasangan)  
 **Jadwal Tindakan**: 22 September 2026 (Siklus I) & 6 Oktober 2026 (Siklus II)  
 
 ---
@@ -14,126 +14,121 @@
 ## 1. Ikhtisar Sistem & Prinsip Arsitektur
 
 ### 1.1 Deskripsi Sistem
-*iobranch* adalah media pembelajaran interaktif berbasis *Progressive Web App (PWA)* yang menggabungkan mesin game 2D Pixel Art retro (estetika konsol 16-bit klasik ala Pokémon GBA / Harvest Moon) dengan mesin visualisasi penelusuran kode (*step-by-step code tracing*). 
+*iobranch* adalah media pembelajaran interaktif berbasis *Progressive Web App (PWA)* yang menggabungkan mesin game 2D Pixel Art retro (estetika konsol 16-bit klasik GBA) dengan mesin visualisasi penelusuran kode langkah demi langkah (*step-by-step code tracing*) dan diagram alir berstandar Flowgorithm SVG.
 
-Sistem ini memvisualisasikan struktur kontrol percabangan (`if`, `if-else`, `else-if`, `switch-case`) sebagai **persimpangan jalan fisik di dunia game**, di mana karakter (*Hero*) melangkah menembus gerbang logika berdasarkan evaluasi kondisi nilai masukan yang diuji oleh murid.
+Sistem memvisualisasikan struktur kontrol percabangan (`if`, `if-else`, `else-if`, `switch-case`) sebagai **persimpangan jalan fisik di dunia game**, di mana karakter (*Hero*) melangkah menembus gerbang logika berdasarkan evaluasi kondisi nilai masukan yang diuji oleh murid.
 
 ### 1.2 Tumpukan Teknologi Resmi (*Official Tech Stack*)
 
-| Komponen Arsitektur | Teknologi Terpilih | Justifikasi Teknis |
+| Komponen Arsitektur | Teknologi Terpilih | Justifikasi Teknis & Kepatuhan Anti-Slop |
 |---|---|---|
-| **Game Engine** | **Phaser 3 (v3.87+)** | Mesin game HTML5 native berstandar industri, rendering WebGL dengan Canvas fallback, konfigurasi `pixelArt: true` (nearest-neighbor crisp rendering), dan native Tiled JSON loader. |
-| **Bahasa Pemrograman** | **TypeScript (v5.x)** | Type-safety penuh pada pemodelan modul soal, penanganan state branching, dan serialisasi data pasangan. Mencegah runtime bug di kelas. |
-| **Peralatan Build & Bundler**| **Vite (v6.x)** | Hot Module Replacement (HMR) sub-detik, tree-shaking efisien, dan integrasi penggelaran instan di Vercel. |
-| **Desain Peta (*Tilemap*)** | **Tiled Map Editor (JSON)** | Format standar industri ekspor JSON. Memisahkan layer visual (Terrain, Walls) dengan *Object Layer* penentu koordinat persimpangan dan pemicu gerbang. |
-| **Aset Pixel Art** | **Aseprite / Pixelorama** | Ekspor sprite-sheet dan texture atlas JSON teroptimasi untuk siklus jalan (*walk cycle*) Hero 4-arah dan animasi palang gerbang. |
-| **PWA & Offline Engine** | **vite-plugin-pwa (Workbox)** | Standar emas PWA modern: otomatisasi Service Worker precaching untuk semua bundel aset dan tilemap, menjamin 100% offline di sekolah. |
-| **Penyimpanan Lokal** | **IndexedDB (`idb-keyval`)** | Penyimpanan lokal asinkronus (~600 byte footprint), tidak memblokir render thread 60 FPS, tahan terhadap pembersihan memori otomatis ponsel. |
-| **Platform Penggelaran** | **Vercel** | Hosting statis global berkecepatan tinggi, sertifikat SSL/HTTPS otomatis (syarat mutlak PWA Service Worker), dan nol biaya operasional. |
+| **Game Engine** | **Phaser 3 (v3.87+)** | Mesin game HTML5 native, konfigurasi `pixelArt: true` (rendering tajam nearest-neighbor), tekstur prosedural native, dan manajemen scene modular. |
+| **Bahasa Pemrograman** | **TypeScript (v5.x)** | Type-safety penuh pada pemodelan modul soal, penanganan state percabangan, dan serialisasi data pasangan. Menjamin 0 error saat build produksi. |
+| **Peralatan Build & Bundler** | **Vite (v6.x)** | Pembangunan bundel sangat cepat, tree-shaking efisien, dan integrasi penggelaran instan di Vercel. |
+| **Styling & Tata Letak DOM** | **Pure Vanilla CSS (`src/style.css`)** | Menolak dependensi Tailwind CSS berlebih. Menggunakan CSS Variables terstruktur bertema *Warm Parchment & Forest Emerald*, ringan di GPU ponsel murah. |
+| **Diagram Alir Logika** | **Flowgorithm SVG Renderer (`FlowgorithmView.ts`)** | Generator SVG native berstandar Flowgorithm (Oval, Jajar Genjang, Belah Ketupat, Persegi Panjang) yang menyala sinkron dengan baris kode aktif. |
+| **PWA & Offline Engine** | **vite-plugin-pwa (Workbox)** | Otomatisasi Service Worker precaching untuk seluruh bundel aset dan skrip, menjamin aplikasi 100% berjalan normal dalam Mode Pesawat. |
+| **Penyimpanan Lokal** | **IndexedDB (`idb-keyval`)** | Penyimpanan lokal asinkronus (~600 byte footprint), tidak memblokir render thread 60 FPS, tahan terhadap pembersihan memori otomatis peramban. |
+| **Platform Penggelaran** | **Vercel** | Hosting statis global berkecepatan tinggi dengan HTTPS otomatis (syarat mutlak PWA Service Worker) dan nol biaya peladen. |
 
 ### 1.3 Pola Arsitektur: *Decoupled Hybrid Architecture (Canvas + Retro DOM)*
 Sistem memisahkan tanggung jawab visual dunia game dan manipulasi teks kode menjadi dua lapisan yang berkomunikasi secara asinkronus melalui **Event Bus Terpusat (`EventCenter`)**:
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                            iobranch ARCHITECTURE                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 1: GAME WORLD VIEWPORT (Phaser 3 Canvas 2D / WebGL)                  │
-│  ├── WorldScene (Tilemap Tiled: Jalur Tanah, Rerumputan, Pohon, Rambu IF)   │
-│  ├── HeroSprite (Karakter Pixel 16x16, Animasi Walk-Cycle 4-Arah)           │
-│  └── GateSystem (Gerbang IF & ELSE dengan Permata Menyala & Palang Buka)    │
-├──────────────────────────────────────┬──────────────────────────────────────┤
-│                                      │                                      │
-│   ▲ Event: 'GATE_OPENED'             │   ▼ Event: 'RUN_SIMULATION'          │
-│   │                                  │   │                                  │
-│   └──────────────────────┐           │   ┌──────────────────────────────────┘
-│                          │           │   │
-│                     ┌────┴───────────┴───▼────┐
-│                     │  Phaser EventCenter Bus │
-│                     └────┬───────────┬───▲────┘
-│                          │           │   │
-├──────────────────────────┴───────────┴───┴──────────────────────────────────┤
-│  LAYER 2: RETRO RPG CONTROL PANEL (DOM / HTML5 / Tailwind / GBA Style)      │
-│  ├── Onboarding Modal (Registrasi Kelompok Pasangan / Murid 1 & 2)           │
-│  ├── Dual-Syntax Switcher (Saklar Instan Pseudocode ID ⮂ Bahasa C)          │
-│  ├── Mindful Predict-First Gate (Input Data & Pemilihan Tebakan Jalur)      │
-│  ├── Code Highlighter Stepper (Penyorotan Baris Aktif, Cabang Lewat Redup)  │
-│  ├── Terminal Konsol Retro (Pencetak Keluaran Program & Umpan Balik)        │
-│  └── Branch Coverage Tracker (Lencana Gamifikasi 2 Bintang)                 │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  LAYER 3: CORE LOGIC & PERSISTENCE (TypeScript Services)                    │
-│  ├── TracerEngine.ts (Mesin Penelusuran Baris Kode & Evaluator Ekspresi)    │
-│  ├── CycleGuard.ts (Pengunci Materi Siklus I & II dengan PIN Guru 'PTK10')  │
-│  ├── AudioService.ts (Sintesis Suara Retro 8-Bit via Native Web Audio API)   │
-│  ├── StorageService.ts (Penyimpanan Asinkronus Sesi Pasangan via IndexedDB) │
-│  └── AssessmentExportService.ts (Ekspor CSV & Web Share API ke Drive)       │
-└─────────────────────────────────────────────────────────────────────────────┘
+```text
++-----------------------------------------------------------------------------+
+|                            iobranch ARCHITECTURE                            |
++-----------------------------------------------------------------------------+
+|  LAYER 1: GAME WORLD VIEWPORT (Phaser 3 Canvas 2D / WebGL)                  |
+|  |-- BootScene (Pembangkit Tekstur Prosedural Peta, Ubin, Gedung, & Karakter)|
+|  |-- WorldScene (Eksplorasi Kota Harmoni, Navigasi Virtual D-Pad, Rambu IF) |
+|  |-- BattleScene (Arena Pertarungan 5 Ronde Logika Percabangan RPG)         |
+|  +-- GateSystem (Gerbang IF & ELSE dengan Obor Logika Menyala & Palang Buka) |
++--------------------------------------+--------------------------------------+
+|                                      |                                      |
+|   ^ Event: 'GATE_OPENED'             |   v Event: 'RUN_SIMULATION'          |
+|   |                                  |   |                                  |
+|   +----------------------+           |   +----------------------------------+
+|                          |           |   |
+|                     +----+-----------+---v----+
+|                     |  Phaser EventCenter Bus |
+|                     +----+-----------+---^----+
+|                          |           |   |
++--------------------------+-----------+---+----------------------------------+
+|  LAYER 2: RETRO CONTROL PANEL (DOM / HTML5 / Pure Vanilla CSS / Warm Theme) |
+|  |-- Onboarding Modal (Registrasi Tim Pasangan: Tim Absen XX-YY)            |
+|  |-- Dual-Syntax Switcher (Saklar Instan Pseudocode ID <-> Bahasa C)        |
+|  |-- Mindful Predict-First Gate (Input Nilai Variabel & Tebakan Alur Cabang)|
+|  |-- Code Stepper & Flowgorithm SVG (Penyorotan Baris Aktif & Alur Diagram) |
+|  |-- Virtual D-Pad Overlay (Kontrol Navigasi Sentuh Khusus Layar Ponsel)    |
+|  |-- Terminal Konsol Retro (Pencetak Keluaran Program & Umpan Balik)        |
+|  +-- Branch Coverage Tracker (Lencana Bintang & Bobot Kasus Terpadu)        |
++-----------------------------------------------------------------------------+
+|  LAYER 3: CORE LOGIC & PERSISTENCE (TypeScript Services)                    |
+|  |-- TracerEngine.ts (Mesin Penelusuran Baris Kode & Evaluator Relasional)  |
+|  |-- CycleGuard.ts (Pengunci Materi Siklus II: Token Murid & PIN Guru)      |
+|  |-- AudioService.ts (Sintesis Suara Retro 8-Bit via Native Web Audio API)  |
+|  |-- StorageService.ts (Penyimpanan Asinkronus Sesi & Skor Formatif PTK)    |
+|  +-- AssessmentExportService.ts (Ekspor Laporan TXT/CSV & Web Share API)    |
++-----------------------------------------------------------------------------+
 ```
 
 ---
 
 ## 2. Struktur Modul & Manajemen Berkas Proyek
 
-Proyek diorganisasikan dalam struktur modular berbasis TypeScript dan Vite:
+Proyek diorganisasikan dalam struktur modular berbasis TypeScript dan Vite yang bersih tanpa dependensi tak terpakai:
 
 ```text
-d:\Anthonio Akbar\After Wisuda\PPG PRAJAB\LMS\!SEMESTER 2\PTK\iobranch\
-├── package.json                # Definisi dependensi (Phaser, idb-keyval, Vite, PWA)
-├── tsconfig.json               # Konfigurasi compiler TypeScript
-├── vite.config.ts              # Konfigurasi Vite + vite-plugin-pwa (Workbox)
-├── vercel.json                 # Konfigurasi rute & header PWA Vercel
-├── index.html                  # Shell HTML antarmuka hybrid
-│
-├── public/
-│   ├── favicon.ico
-│   ├── manifest.webmanifest    # Metadata PWA standalone
-│   ├── assets/
-│   │   ├── tilesets/
-│   │   │   ├── retro_terrain.png # Tileset 16x16 rumput, tanah, pohon, pagar
-│   │   │   └── logic_gates.png   # Tileset gerbang kayu, batu, & obor permata
-│   │   ├── maps/
-│   │   │   ├── mission_01.json   # Tilemap Tiled kasus 1 (Operator/Gerbang)
-│   │   │   ├── mission_02.json   # Tilemap Tiled kasus 2 (Percabangan IF)
-│   │   │   └── mission_03.json   # Tilemap Tiled kasus 3 (Percabangan IF-ELSE)
-│   │   ├── sprites/
-│   │   │   ├── hero.png          # Sprite sheet karakter petualang
-│   │   │   └── hero.json         # Atlas definisi frame animasi Aseprite
-│   │   └── icons/
-│   │       ├── icon-192.png      # Ikon PWA 192x192 px
-│   │       └── icon-512.png      # Ikon PWA 512x512 px
-│
-└── src/
-    ├── main.ts                 # Titik masuk aplikasi (Bootstrap SPA)
-    ├── style.css               # Desain sistem Retro RPG & utilitas layout
-    │
-    ├── types/
-    │   ├── module.types.ts     # Definisi tipe Modul, Kasus, dan Langkah Tracing
-    │   ├── session.types.ts    # Definisi tipe Sesi Pasangan & Lencana
-    │   └── events.types.ts     # Definisi tipe komunikasi EventCenter
-    │
-    ├── game/
-    │   ├── config.ts           # Konfigurasi Phaser 3 (Canvas, resolusi, physics)
-    │   ├── EventCenter.ts      # Event bus jembatan Phaser ↔ DOM
-    │   └── scenes/
-    │       ├── BootScene.ts    # Prapemuatan aset statis & inisialisasi awal
-    │       ├── WorldScene.ts   # Scene utama dunia Tiled, gerak Hero, & animasi gerbang
-    │       └── BattleScene.ts  # Scene pertarungan logika RPG (Turn-based Branching Challenge)
-    │
-    ├── ui/
-    │   ├── UIManager.ts        # Pengendali DOM UI Layer retro GBA
-    │   ├── SyntaxRenderer.ts   # Saklar tampilan Pseudocode ID ↔ Bahasa C
-    │   ├── DialogBox.ts        # Penampil teks typewriter konsol guru/status
-    │   └── CoverageView.ts     # Penampil visual lencana 2 Bintang (Branch Coverage)
-    │
-    ├── logic/
-    │   ├── TracerEngine.ts     # Simulator penelusuran baris kode & evaluasi kondisi
-    │   ├── CycleGuard.ts       # Pengunci modul Siklus II (Teacher PIN PTK10)
-    │   └── modules.data.ts     # Bank data soal kontekstual (Modul 1 s.d. 5)
-    │
-    └── services/
-        ├── AudioService.ts             # Sintesis efek suara 8-bit native Web Audio API
-        ├── StorageService.ts           # Abstraksi penyimpanan IndexedDB (idb-keyval)
-        └── AssessmentExportService.ts  # Layanan ekspor CSV & Web Share API ke Google Drive
+iobranch/
+|-- package.json                # Definisi dependensi (Phaser 3, idb-keyval, Vite, PWA)
+|-- tsconfig.json               # Konfigurasi compiler TypeScript ketat
+|-- vite.config.ts              # Konfigurasi Vite + vite-plugin-pwa (Workbox)
+|-- vercel.json                 # Konfigurasi rute & header PWA Vercel
+|-- index.html                  # Shell HTML antarmuka hybrid
+|
+|-- public/
+|   |-- favicon.ico
+|   |-- manifest.webmanifest    # Metadata PWA standalone
+|   `-- assets/
+|       |-- icons/ (icon-192.png, icon-512.png)
+|       `-- images/ (pak_budi_portrait.jpg)
+|
+`-- src/
+    |-- main.ts                 # Titik masuk aplikasi (Bootstrap SPA)
+    |-- style.css               # Desain sistem Warm Parchment & Forest Emerald
+    |
+    |-- types/
+    |   |-- module.types.ts     # Definisi tipe Modul, Kasus, dan Langkah Tracing
+    |   |-- session.types.ts    # Definisi tipe Sesi Pasangan, Skor Formatif, & Status
+    |   `-- events.types.ts     # Definisi tipe komunikasi EventCenter
+    |
+    |-- game/
+    |   |-- config.ts           # Konfigurasi Phaser 3 (Canvas, resolusi, physics)
+    |   |-- EventCenter.ts      # Event bus jembatan Phaser <-> DOM
+    |   `-- scenes/
+    |       |-- BootScene.ts    # Pembangkit tekstur prosedural ubin & sprite
+    |       |-- WorldScene.ts   # Scene peta Kota Harmoni & gerak Hero
+    |       `-- BattleScene.ts  # Scene tantangan pertarungan logika 5 ronde
+    |
+    |-- ui/
+    |   |-- UIManager.ts            # Pengendali utama 12 layar antarmuka DOM
+    |   |-- SyntaxRenderer.ts       # Saklar tampilan Pseudocode ID <-> Bahasa C
+    |   |-- FlowgorithmView.ts      # Generator diagram alir SVG standar Flowgorithm
+    |   |-- VirtualPad.ts           # Kontrol sentuh D-Pad navigasi kanvas ponsel
+    |   |-- TeamSymbolRenderer.ts   # Renderer lambang tim pixel art (4 simbol)
+    |   |-- DialogBox.ts            # Kotak dialog typewriter interaktif
+    |   `-- CoverageView.ts         # Penampil lencana bintang & bobot kasus telusur
+    |
+    |-- logic/
+    |   |-- TracerEngine.ts     # Simulator penelusuran baris & evaluator relasional
+    |   |-- CycleGuard.ts       # Pengunci modul Siklus II (Token Murid & PIN Guru)
+    |   |-- materi.data.ts      # Bank materi pembelajaran konseptual (5 topik)
+    |   `-- modules.data.ts     # Bank data kasus masalah nyata (5 kasus)
+    |
+    `-- services/
+        |-- AudioService.ts             # Sintesis efek suara 8-bit native Web Audio
+        |-- StorageService.ts           # Abstraksi IndexedDB & kalkulasi nilai formatif
+        `-- AssessmentExportService.ts  # Layanan ekspor CSV/TXT & Web Share API
 ```
 
 ---
@@ -141,60 +136,49 @@ d:\Anthonio Akbar\After Wisuda\PPG PRAJAB\LMS\!SEMESTER 2\PTK\iobranch\
 ## 3. Desain Komponen Inti & Alur Kerja Data
 
 ### 3.1 Game Engine Scene Architecture (`Phaser 3`)
-Sistem game mengadopsi resolusi dasar retro $480 \times 240$ pixel dengan penskalaan `Phaser.Scale.FIT` dan `pixelArt: true` guna menjamin ketajaman pixel (*zero-blur*).
+Sistem game mengadopsi resolusi dasar retro 480 x 240 pixel dengan penskalaan `Phaser.Scale.FIT` dan `pixelArt: true` guna menjamin ketajaman visual.
 
-#### A. `BootScene.ts`
-* Memuat seluruh texture atlas (`hero.png`, `hero.json`), tileset terrain, dan file peta JSON dari Tiled.
-* Mendaftarkan animasi global sprite Hero:
-  * `hero-walk-down` (Frame 0–3, 8 FPS)
-  * `hero-walk-up` (Frame 4–7, 8 FPS)
-  * `hero-walk-right` (Frame 8–11, 8 FPS)
-  * `hero-idle` (Frame 0, diam)
+#### A. Tekstur Prosedural Native (`BootScene.ts`)
+Alih-alih memuat berkas peta eksternal Tiled JSON yang rentan terhadap galat jaringan atau HTTP 404 saat mode luring, `BootScene.ts` membangkitkan tekstur ubin secara prosedural pada saat booting:
+* Tekstur jalan setapak batu paving *Warm Parchment*.
+* Tekstur ubin rumput emerald dan pepohonan kota.
+* Tekstur gedung sekolah SMA Harmoni, lab komputer, perpustakaan, dan gerbang logika.
+* Sprite karakter Hero 16x16 px dan sprite Guru Pak Budi.
 
-#### B. `WorldScene.ts` & Mekanika Navigasi Peta Dunia
-* Membaca Tiled JSON dan merender layer: `GroundLayer`, `PathLayer`, `FoliageLayer`.
-* **Sistem Navigasi Ganda Berdasarkan Konteks:**
-  1. **Mode Eksplorasi Bebas (*Overworld Free Roaming* - Layar 02):**
-     * Murid dapat menggerakkan karakter Hero berjalan-jalan di Kota Harmoni menuju gedung Sekolah, Lab, Perpustakaan, dan Taman.
-     * Masukan Sentuh (*Mobile*): Komponen Virtual D-Pad (Atas, Bawah, Kiri, Kanan) dan tombol aksi 'A'.
-     * Masukan Keyboard (*Desktop*): Tombol WASD / Arrow Keys + Space/Enter untuk berdialog dengan NPC.
-  2. **Mode Penelusuran Kode (*Tracing Waypoint Mode* - Layar 05):**
-     * Kontrol bebas dinonaktifkan sementara.
-     * Karakter digerakkan otomatis secara deterministik melalui *Object Layer* koordinat:
-       * `SpawnPoint`: Koordinat awal Hero $(x: 32, y: 120)$.
-       * `ForkPoint`: Koordinat persimpangan jalan $(x: 200, y: 120)$ di depan rambu `IF?`.
-       * `GateIFPoint`: Koordinat Gerbang Atas $(x: 380, y: 60)$.
-       * `GateELSEPoint`: Koordinat Gerbang Bawah $(x: 380, y: 180)$.
-     * Saat menerima event `RUN_SIMULATION`, Hero berjalan ke `ForkPoint`, berhenti memeriksa kondisi, lalu melangkah ke `GateIFPoint` (jika TRUE) atau `GateELSEPoint` (jika FALSE) dan menembakkan event `HERO_COMPLETED_BRANCH`.
+#### B. Navigasi Peta & Waypoint Tracing (`WorldScene.ts`)
+* **Mode Eksplorasi Peta Kota (Layar 02):**
+  * Murid menggerakkan karakter Hero di Kota Harmoni menuju gedung-gedung misi.
+  * Masukan Sentuh Ponsel: Ditangani oleh komponen `VirtualPad.ts` (D-Pad sentuh).
+  * Masukan Keyboard Laptop: Tombol panah atau WASD.
+* **Mode Penelusuran Lab Telusur (Layar 05):**
+  * Kontrol bebas dinonaktifkan sementara.
+  * Karakter digerakkan secara deterministik dari titik awal, berhenti di persimpangan untuk evaluasi kondisi, lalu melangkah membuka gerbang IF (jika TRUE) atau gerbang ELSE (jika FALSE).
 
-#### C. `BattleScene.ts` & Mekanika Tantangan Pertarungan Logika (Layar 06)
-* Beroperasi sebagai arena evaluasi turn-based RPG yang diakses di Lab Komputer / Taman Kota:
-  * Menampilkan sprite Hero berhadapan dengan *Bug Monster Lv. 4* (HP: 28/40).
-  * Menerima payload evaluasi kondisi dari `TracerEngine.ts` via `EventCenter`:
-    * Event: `EXECUTE_BATTLE_TURN`, payload: `{ conditionRule: string, chosenAction: string, isCorrect: boolean }`.
-    * Jika pilihan aksi sesuai logika kondisi (`TRUE`): Hero mengeksekusi serangan kritis (*Critical Attack*), darah monster berkurang, dan memicu penambahan **+50 XP**.
-    * Jika pilihan salah (`FALSE`): Monster menyerang balik dan memicu umpan balik reflektif dari NPC Guru Pak Budi.
-* Menyediakan jembatan mulus untuk kembali ke `WorldScene` pasca-pertempuran.
+#### C. Arena Tantangan Pertarungan Logika (`BattleScene.ts`)
+* Beroperasi sebagai arena evaluasi logika berbasis giliran (*turn-based*):
+  * Karakter murid menghadapi Bug Monster dalam 5 ronde kondisi percabangan.
+  * Evaluasi kondisi dieksekusi melalui pilihan serangan yang sesuai dengan aturan logika tiap ronde.
+  * Keputusan tepat memicu serangan kritis dan menambah capaian skor tantangan tim (0–100).
+  * Menyediakan mode latihan mandiri pasca-penyelesaian tantangan resmi.
 
-#### D. Antarmuka Komunikasi Asinkronus EventCenter (`EventCenter.ts`)
-Komunikasi antara Canvas Phaser 3, retro DOM UI, dan Logic Service dijembatani oleh event bus terpusat:
+#### D. Komunikasi EventCenter (`EventCenter.ts`)
 
 | Nama Event | Pengirim | Penerima | Deskripsi & Payload |
 |---|---|---|---|
 | `RUN_SIMULATION` | DOM UI | `WorldScene` | Memicu Hero berjalan menelusuri waypoint `{ inputVal: number, conditionResult: boolean }`. |
 | `GATE_OPENED` | `WorldScene` | DOM UI | Mengabarkan gerbang IF/ELSE terbuka, memicu penyorotan baris aktif. |
-| `HERO_COMPLETED_BRANCH` | `WorldScene` | DOM UI & Logic | Hero tiba di cabang akhir; memicu evaluasi bintang coverage & simpan progress. |
-| `START_BATTLE` | `WorldScene` / UI | `BattleScene` | Mem-pause WorldScene & membuka battle arena `{ enemyId: string, conditionRule: string }`. |
+| `HERO_COMPLETED_BRANCH` | `WorldScene` | DOM UI & Logic | Hero tiba di cabang akhir, memicu evaluasi bintang coverage & simpan progres. |
+| `START_BATTLE` | `WorldScene` / UI | `BattleScene` | Membuka battle arena tantangan logika. |
 | `EXECUTE_BATTLE_TURN` | DOM UI | `BattleScene` | Murid memilih aksi bertarung `{ action: string, isCorrect: boolean }`. |
-| `BATTLE_RESOLVED` | `BattleScene` | `WorldScene` & UI | Pertempuran tuntas `{ won: boolean, xpEarned: number }`; melanjutkan eksplorasi. |
-| `CYCLE_UNLOCKED` | `CycleGuard` | DOM Nav | Membuka modul 4 & 5 setelah PIN guru `PTK10` valid diverifikasi. |
+| `BATTLE_RESOLVED` | `BattleScene` | DOM UI | Pertempuran tuntas `{ won: boolean, score: number }`. |
+| `CYCLE_UNLOCKED` | `CycleGuard` | DOM Nav | Membuka modul 4 & 5 setelah token atau PIN diverifikasi. |
 
 ---
 
-### 3.2 Mesin Penelusuran Kode & Evaluator Logika (`TracerEngine.ts`)
+### 3.2 Mesin Evaluator Logika & Pemodelan Data (`TracerEngine.ts`)
 
 #### A. Evaluator Relasional Aman (*Safe Expression Evaluator*)
-Aplikasi menolak penggunaan fungsi berbahaya `eval()` atau `new Function()`. Evaluator ekspresi relasional menguraikan input dan operator secara eksplisit:
+Aplikasi menolak penggunaan fungsi berbahaya `eval()` atau `new Function()`. Evaluator ekspresi relasional menguraikan masukan secara eksplisit:
 
 ```typescript
 // src/logic/TracerEngine.ts
@@ -213,461 +197,156 @@ export function evaluateCondition(leftValue: number, op: RelationalOperator, rig
 }
 ```
 
-#### B. Struktur Data Definisi Kasus & Langkah Tracing
-Setiap modul soal dimodelkan dengan antarmuka TypeScript yang ketat:
+#### B. Antarmuka Data Sesi Murid & Penilaian Formatif PTK
 
 ```typescript
-// src/types/module.types.ts
-export interface CodeLine {
-  lineNumber: number;
-  pseudoText: string;
-  cText: string;
-  branchType: 'INIT' | 'CONDITION' | 'BRANCH_IF' | 'BRANCH_ELSE' | 'OUTPUT';
+// src/types/session.types.ts
+export type TeamSymbol = 'algoritma' | 'biner' | 'matriks' | 'vektor';
+
+export interface StudentSession {
+  pairId: string;           // Diformat otomatis: 'Tim Absen XX-YY'
+  student1Name: string;     // Nama lengkap Murid 1
+  student1Absen: number;    // Nomor absen Murid 1
+  student2Name: string;     // Nama lengkap Murid 2
+  student2Absen: number;    // Nomor absen Murid 2
+  teamSymbol: TeamSymbol;   // Lambang pixel art tim
+  totalXp: number;          // Kompatibilitas sesi (default: 0)
+  currentLevel: number;     // Level tim
+  createdAt: number;        // Timestamp pembuatan sesi
 }
 
-export interface CaseModule {
-  id: string;               // Contoh: 'm03'
-  title: string;            // 'Kasir Kantin Cerdas (Kupon Diskon)'
-  cycleRequired: 1 | 2;     // 1: Siklus I (Aktif), 2: Siklus II (Terkunci)
-  inputVariable: string;    // 'total_belanja'
-  defaultInput: number;     // 30000
-  targetComparison: {
-    op: RelationalOperator; // '>='
-    boundaryValue: number;  // 25000
-  };
-  lines: CodeLine[];
-  hints: {
-    level1: string;
-    level2: string;
-    level3: string;
-  };
-}
-
-  // src/types/session.types.ts
-  export interface StudentSession {
-    pairId: string;
-    student1Name: string;
-    student1Absen: number;
-    student2Name: string;
-    student2Absen: number;
-    teamSymbol: 'algoritma' | 'biner' | 'matriks' | 'vektor';
-    totalXp: number;      // Akumulasi poin pengalaman (default: 0)
-    currentLevel: number; // Kalkulasi: Math.floor(totalXp / 100) + 1
-    createdAt: number;
-  }
-
-  export interface ModuleProgress {
-    testedBranches: string[]; // ['IF', 'ELSE']
-    stars: number;            // 0, 1, atau 2
-    isCompleted: boolean;
-    xpEarned: number;
-    updatedAt: number;
-  }
-```
-
----
-
-### 3.3 Saklar Dwi-Bahasa (*Dual-Syntax Switcher* - `SyntaxRenderer.ts`)
-* Elemen HTML kode diberi atribut penanda baris: `<div data-line="1" class="code-line">`.
-* Saat tombol toggle ditekan:
-  * State `currentSyntax` berganti antara `'pseudo'` dan `'c'`.
-  * Sistem hanya memperbarui properti `textContent` setiap baris sesuai pemetaan `lines[i].pseudoText` atau `lines[i].cText`.
-  * Penanda sorotan aktif (*highlight active class*) dan opasitas cabang yang meredup (*dimmed skipped branch*) tidak berubah sama sekali, sehingga transisi bahasa terjadi seketika (*0ms latency*) tanpa merusak posisi simulasi.
-
----
-
-### 3.4 Pelacak Cakupan Cabang & Sistem Pengalaman (*CoverageView.ts*)
-* Setiap modul memiliki set cabang yang dilacak: `Set<'IF' | 'ELSE'>`.
-* **Kalkulasi Lencana & Hadiah XP:**
-  * Ukuran Set $= 0$: `⭐ 0/2 Cabang Teruji` (Monokrom redup, 0 XP).
-  * Ukuran Set $= 1$: `⭐ 1/2 Cabang Teruji` (Amber Gold, **+50 XP**, tantangan: *"Bagus! Sekarang cari nilai input lain agar cabang satunya ikut teruji!"*).
-  * Ukuran Set $= 2$: `⭐⭐ 2/2 TUNTAS!` (Emerald Green menyala, **+100 XP**, memicu fanfare kemenangan retro dan membuka tanda centang pada menu modul).
-* Data langsung disimpan secara persisten ke **IndexedDB**.
-
----
-
-### 3.5 Sistem Penguncian Siklus PTK (`CycleGuard.ts`)
-* **Status Default**: `activeCycle = 1`.
-* Saat modul dimuat di menu navigasi:
-  * Modul dengan `cycleRequired: 2` (Modul 4 *else-if* dan Modul 5 *switch-case*) otomatis diberi atribut `disabled`, kelas CSS `grayscale opacity-50 cursor-not-allowed`, dan ikon gembok 🔒.
-  * Murid yang mencoba mengklik modul terkunci akan memicu dialog ramah: *"Materi Misi Siklus II - Akan dibuka pada pertemuan berikutnya!"*
-* **Teacher Passcode Verification & Admin Control**:
-  * Ketuk 3 kali pada logo `iobranch` di header membuka modal tersembunyi guru.
-  * Masukan PIN rahasia `PTK10` membuka **Teacher Control Panel**:
-    1. **Buka Kunci Siklus II**: Mengubah state ke Siklus II dan membuka Modul 4 & 5.
-    2. **Konfigurasi Tautan Google Drive**: Menampilkan URL tujuan unggah aktif (default: `https://s.id/drive-ptk-x10`) dan menyediakan kolom input teks bagi guru untuk memperbarui tautan tersebut sewaktu-waktu secara instan di kelas.
-    ```typescript
-    export async function verifyTeacherPin(pinInput: string): Promise<boolean> {
-      if (pinInput.trim() === 'PTK10') {
-        EventCenter.emit('TEACHER_PANEL_OPENED');
-        return true;
-      }
-      return false;
-    }
-
-    export async function updateCycleAndDrive(cycle: 1 | 2, customDriveUrl?: string): Promise<void> {
-      await StorageService.setCycleState(cycle);
-      if (customDriveUrl && customDriveUrl.trim() !== '') {
-        await StorageService.setDriveUrl(customDriveUrl.trim());
-      }
-      EventCenter.emit('CYCLE_UNLOCKED', cycle);
-    }
-    ```
-  * Begitu berhasil diperbarui, pengaturan langsung tersimpan permanen di IndexedDB gawai tersebut tanpa perlu kompilasi ulang.
-
----
-
-### 3.6 Sintesis Suara Retro 8-Bit Native (`AudioService.ts`)
-Menolak penggunaan file suara luar (`.mp3`/`.wav`) demi menjaga kecepatan, portabilitas, dan ukuran bundel di bawah 1 MB.
-
-```typescript
-// src/services/AudioService.ts
-class AudioService {
-  private ctx: AudioContext | null = null;
-  private isMuted: boolean = false;
-
-  public initOnFirstTouch(): void {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.ctx = new AudioCtx();
-    }
-    if (this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  }
-
-  public playTone(freq: number, duration: number, type: OscillatorType = 'square', volume: number = 0.08): void {
-    if (this.isMuted || !this.ctx) return;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-    gain.gain.setValueAtTime(volume, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start();
-    osc.stop(this.ctx.currentTime + duration);
-  }
-
-  public playDialogTick(): void {
-    this.playTone(480, 0.02, 'square', 0.04);
-  }
-
-  public playButtonBlip(): void {
-    this.playTone(330, 0.04, 'square', 0.08);
-  }
-
-  public playLogicTrue(): void {
-    this.playTone(587.33, 0.08, 'triangle', 0.1);
-  }
-
-  public playLogicFalse(): void {
-    this.playTone(220.00, 0.12, 'sawtooth', 0.08);
-  }
-
-  public playBranchSuccessChime(): void {
-    if (this.isMuted || !this.ctx) return;
-    // Victory Fanfare 4 Nada Sesuai DESIGN.md: C5, E5, G5, C6
-    const fanfare = [
-      { freq: 523.25, delay: 0 },
-      { freq: 659.25, delay: 70 },
-      { freq: 783.99, delay: 140 },
-      { freq: 1046.50, delay: 210 }
-    ];
-    fanfare.forEach((n) => setTimeout(() => this.playTone(n.freq, 0.08, 'triangle', 0.1), n.delay));
-  }
-}
-export const soundFx = new AudioService();
-```
-
----
-
-### 3.7 Penyimpanan Asinkronus IndexedDB (`StorageService.ts`)
-Menggunakan pustaka mini `idb-keyval` untuk keandalan data jangka panjang:
-
-```typescript
-// src/services/StorageService.ts
-import { get, set, del } from 'idb-keyval';
-import { StudentSession, ModuleProgress } from '../types/session.types';
-
-const KEYS = {
-  SESSION: 'iobranch_session',
-  PROGRESS: 'iobranch_progress',
-  CYCLE: 'iobranch_active_cycle',
-  DRIVE_URL: 'iobranch_drive_url'
-};
-
-export class StorageService {
-  public static async saveSession(session: StudentSession): Promise<void> {
-    await set(KEYS.SESSION, session);
-  }
-
-  public static async getSession(): Promise<StudentSession | undefined> {
-    return await get<StudentSession>(KEYS.SESSION);
-  }
-
-  public static async saveModuleCoverage(moduleId: string, branches: string[], xpReward: number = 0): Promise<void> {
-    const progress = (await get<Record<string, ModuleProgress>>(KEYS.PROGRESS)) || {};
-    const prev = progress[moduleId];
-    const prevBranches = prev ? prev.testedBranches : [];
-    const merged = Array.from(new Set([...prevBranches, ...branches]));
-    
-    progress[moduleId] = {
-      testedBranches: merged,
-      stars: merged.length >= 2 ? 2 : merged.length,
-      isCompleted: merged.length >= 2,
-      xpEarned: (prev ? prev.xpEarned : 0) + xpReward,
-      updatedAt: Date.now()
-    };
-    await set(KEYS.PROGRESS, progress);
-
-    // Update total XP pada sesi
-    const session = await this.getSession();
-    if (session && xpReward > 0) {
-      session.totalXp += xpReward;
-      session.currentLevel = Math.floor(session.totalXp / 100) + 1;
-      await this.saveSession(session);
-    }
-  }
-
-  public static async getCycleState(): Promise<number> {
-    return (await get<number>(KEYS.CYCLE)) || 1;
-  }
-
-  public static async setCycleState(cycle: number): Promise<void> {
-    await set(KEYS.CYCLE, cycle);
-  }
-
-  public static async getDriveUrl(): Promise<string> {
-    return (await get<string>(KEYS.DRIVE_URL)) || 'https://s.id/drive-ptk-x10';
-  }
-
-  public static async setDriveUrl(url: string): Promise<void> {
-    await set(KEYS.DRIVE_URL, url.trim());
-  }
+export interface FormativeScores {
+  telusurScore: number;          // Pilar 1: Nilai Telusur (Bobot 30/30/40, maks 100)
+  battleScore: number;           // Pilar 2: Nilai Tantangan Bug Monster (0-100)
+  evaluasiScore: number;         // Pilar 3: Nilai Evaluasi Mandiri 5 Soal (0-100)
+  evaluasiAttemptCount: number;  // Jumlah percobaan pengerjaan evaluasi
+  finalScore: number;            // Rerata berbobot penilaian formatif resmi (0-100)
+  completedAt?: number;          // Timestamp penyelesaian resmi
 }
 ```
 
 ---
 
-### 3.8 Layanan Ekspor Data Formatif & Web Share API (`AssessmentExportService.ts`)
-Mengotomatisasi penamaan file standar dan pengunggahan 2-ketukan ke Google Drive di perangkat seluler:
-
-```typescript
-// src/services/AssessmentExportService.ts
-import { StorageService } from './StorageService';
-
-export class AssessmentExportService {
-  public static async generateCsvData(): Promise<{ filename: string; content: string }> {
-    const session = await StorageService.getSession();
-    const cycle = await StorageService.getCycleState();
-    
-    const pairId = session?.pairId || 'Meja00';
-    const s1 = session?.student1Name ? `${session.student1Name}${session.student1Absen}` : 'S1';
-    const s2 = session?.student2Name ? `${session.student2Name}${session.student2Absen}` : 'S2';
-    const filename = `iobranch_S${cycle}_${pairId}_${s1}_${s2}.csv`;
-
-    const headers = [
-      'Timestamp', 'Siklus', 'PairId', 'Murid1', 'AbsenMurid1', 
-      'Murid2', 'AbsenMurid2', 'TeamSymbol', 'TotalXP', 'CurrentLevel'
-    ].join(',');
-
-    const row = [
-      new Date().toISOString(),
-      cycle,
-      session?.pairId || '',
-      session?.student1Name || '',
-      session?.student1Absen || 0,
-      session?.student2Name || '',
-      session?.student2Absen || 0,
-      session?.teamSymbol || 'algoritma',
-      session?.totalXp || 0,
-      session?.currentLevel || 1
-    ].join(',');
-
-    return { filename, content: `${headers}\n${row}\n` };
-  }
-
-  public static async exportToDrive(customDriveUrl?: string): Promise<void> {
-    const targetUrl = customDriveUrl || (await StorageService.getDriveUrl());
-    const { filename, content } = await this.generateCsvData();
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const file = new File([blob], filename, { type: 'text/csv' });
-
-    // Jalur Utama: Web Share API untuk HP Android / iOS (Simpan langsung ke Google Drive App)
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: 'Rekap Formatif iobranch',
-          text: `Data formatif pembelajaran pasangan ${filename}`
-        });
-        return;
-      } catch {
-        // Fallback jika dibatalkan atau tidak diizinkan sistem
-      }
-    }
-
-    // Jalur Cadangan: Unduh file CSV lokal + buka link Google Drive di tab baru
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    window.open(targetUrl, '_blank');
-  }
-}
-```
+### 3.3 Mesin Diagram Alir Flowgorithm SVG (`FlowgorithmView.ts`)
+Komponen ini merender diagram alir SVG murni berstandar Flowgorithm:
+* **Simbol Terminator (Oval Lonjong)**: Penanda `Mulai` dan `Selesai`.
+* **Simbol Input/Output (Jajar Genjang)**: Masukan nilai dan pencetakan keluaran.
+* **Simbol Keputusan (Belah Ketupat)**: Titik evaluasi ekspresi kondisi percabangan.
+* **Simbol Proses (Persegi Panjang)**: Inisialisasi variabel dan penugasan nilai.
+* **Konektor Panah Dinamis**: Garis alir yang berubah warna dan menebal saat alur cabang dieksekusi secara waktu nyata, memberikan pemahaman visual 1:1 terhadap baris kode di sampingnya.
 
 ---
 
-## 4. Spesifikasi Desain Antarmuka & Token Visual Anti-Slop (SSOT: `DESIGN.md`)
+### 3.4 Kontrol Sentuh Ponsel Pintar (`VirtualPad.ts`)
+* Merender overlay D-Pad arah (Atas, Bawah, Kiri, Kanan) transparan di atas kanvas Phaser khusus pada tampilan mobile (lebar layar <= 768 px).
+* Menangani sentuhan *touch events* (`touchstart`, `touchend`, `touchmove`) secara halus tanpa menghalangi pandangan kanvas.
 
-Mengikuti pedoman [anti-slop](https://github.com/miqdadbadjuber/anti-slop) dan acuan baku `DESIGN.md`:
+---
+
+### 3.5 Pengunci Siklus & Pengaturan Fleksibel (`CycleGuard.ts`)
+* **Mode Siklus Default**: Siklus 1 aktif saat pendaftaran tim.
+* **Pembukaan Siklus 2 Mandiri (Token Murid)**: Murid dapat memasukkan token `SIKLUS2` yang dibagikan oleh guru di kelas untuk membuka materi Modul 4 dan 5 secara permanen di gawainya.
+* **Mode Demo Guru (Bypass Mode)**: Fasilitator guru dapat memasukkan PIN `PTK10` pada modal rahasia untuk mengaktifkan mode bebas eksplorasi seluruh landmark tanpa batasan urutan langkah, berguna untuk keperluan peragaan di depan kelas.
+
+---
+
+### 3.6 Layanan Penyimpanan & Penilaian Formatif (`StorageService.ts`)
+Menggunakan `idb-keyval` untuk penyimpanan asinkronus yang andal:
+* `saveSession()` / `getSession()`: Mengelola sesi tim belajar murid.
+* `getFormativeScores()`: Menghitung nilai formatif resmi berdasarkan bobot kontekstual kasus:
+  * Siklus 1: Kasus 1 (30 poin), Kasus 2 (30 poin), Kasus 3 (40 poin) -> Total 100 poin.
+  * Siklus 2: Kasus 1 (15), Kasus 2 (15), Kasus 3 (20), Kasus 4 (25), Kasus 5 (25) -> Total 100 poin.
+* `generateProgressTextReport()`: Menghasilkan berkas ringkasan teks terstruktur yang merangkum seluruh data kasus uji, lencana, dan skor untuk disalin ke LKPD fisik.
+
+---
+
+### 3.7 Layanan Ekspor & Pengunggahan Cloud (`AssessmentExportService.ts`)
+* **Otomatisasi Nama Berkas**:  
+  `iobranch_Siklus[Cycle]_[CleanPairId]_[M1]_[M2].csv` dan `.txt`.
+* **Pengunggahan Dua Jalur (Mobile-First)**:
+  1. *Jalur Utama (Web Share API)*: Memicu jendela bagikan sistem operasi ponsel (Android/iOS) sehingga murid dapat memilih aplikasi Google Drive dan menyimpan ke folder kelas dalam 2 ketukan.
+  2. *Jalur Cadangan (Fallback)*: Mengunduh berkas secara lokal dan membuka tautan Google Drive guru di tab peramban baru.
+
+---
+
+## 4. Spesifikasi Token Desain Visual Resmi (`src/style.css`)
+
+Mengikuti pedoman [anti-slop](https://github.com/miqdadbadjuber/anti-slop) dan tema resmi *Warm Parchment & Forest Emerald*:
 
 ```css
 /* src/style.css - Official Design Tokens */
 :root {
-  /* Surface Tokens */
-  --bg-app: #081026;
-  --bg-canvas: #090e17;
-  --surface-panel: #0b132b;
-  --surface-panel-alt: #131d2e;
-  --surface-code: #050b14;
-  --border-retro: #2a3a54;
-  --border-focus: #38b2f6;
+  /* Surface Tokens: Warm Parchment Theme */
+  --bg-app: #F7F5F0;            /* Latar aplikasi anti-silau */
+  --bg-canvas: #1C1917;         /* Bingkai kanvas game */
+  --surface-panel: #FFFFFF;     /* Kartu panel putih bersih */
+  --surface-panel-alt: #EFECE6; /* Sub-kartu ivory lembut */
+  --surface-code: #18181B;      /* Kotak editor kode gelap kontras tinggi */
+  
+  /* Border Tokens */
+  --border-subtle: #E5E0D8;     /* Garis batas netral halus */
+  --border-retro: #D0C7B8;      /* Garis batas retro berkarakter */
+  --border-focus: #0F766E;      /* Cincin fokus emerald */
 
-  /* Brand & Action Tokens */
-  --brand-cyan: #38b2f6;
-  --cta-gold: #f59e0b;
-  --cta-gold-dark: #d97706;
+  /* Brand & Status Tokens */
+  --primary: #0F766E;           /* Deep Forest Emerald */
+  --secondary: #D97706;         /* Warm Amber */
+  --success: #15803D;           /* Crisp Emerald Green */
+  --danger: #DC2626;            /* Crimson Red */
+  --warning: #D97706;           /* Warm Ochre */
 
   /* State Tokens: Logika Boolean */
-  --color-true-bg: rgba(16, 185, 129, 0.18);
-  --color-true-border: #10b981;
-  --color-true-text: #34d399;
+  --state-true-bg: rgba(21, 128, 61, 0.12);
+  --state-true-border: var(--success);
+  --state-true-text: #15803D;
 
-  --color-false-bg: rgba(239, 68, 68, 0.18);
-  --color-false-border: #ef4444;
-  --color-false-text: #f87171;
+  --state-false-bg: rgba(220, 38, 38, 0.12);
+  --state-false-border: var(--danger);
+  --state-false-text: #DC2626;
 
-  --color-skipped-opacity: 0.35;
-  --color-gold-star: #f59e0b;
+  --state-skipped-opacity: 0.35;
 
-  /* Typography */
+  /* Typography Colors */
+  --text-primary: #1C1917;      /* Charcoal Ink berkontras tinggi */
+  --text-secondary: #57534E;    /* Stone Slate netral */
+  --text-muted: #78716C;        /* Warm Gray untuk metadata */
+
+  /* Font Families */
   --font-pixel: 'Press Start 2P', monospace;
-  --font-code: 'JetBrains Mono', 'Consolas', monospace;
-  --font-ui: 'Plus Jakarta Sans', sans-serif;
+  --font-code: 'JetBrains Mono', monospace;
+  --font-ui: 'Inter', sans-serif;
 }
 ```
 
 ---
 
-## 5. Strategi PWA, Service Worker, & Deployment Vercel
+## 5. Strategi PWA, Service Worker, & Deployment
 
-### 5.1 Konfigurasi `vite.config.ts` (Workbox Integration)
-```typescript
-import { defineConfig } from 'vite';
-import { VitePWA } from 'vite-plugin-pwa';
+### 5.1 Konfigurasi PWA Workbox
+* PWA dikonfigurasi melalui `vite-plugin-pwa` dengan strategi precaching otomatis untuk berkas HTML, CSS, JavaScript, font lokal, dan gambar statis.
+* Memastikan aplikasi dapat dimuat ulang dan dijalankan 100% normal saat gawai berada dalam Mode Pesawat (*Airplane Mode*).
 
-export default defineConfig({
-  plugins: [
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'assets/**/*', 'public/assets/**/*'],
-      manifest: {
-        name: 'iobranch - Belajar Percabangan Logika',
-        short_name: 'iobranch',
-        description: 'Media PWA Gamifikasi Pembelajaran Percabangan 2D Pixel untuk Informatika SMA',
-        theme_color: '#090e17',
-        background_color: '#090e17',
-        display: 'standalone',
-        orientation: 'portrait-primary',
-        icons: [
-          {
-            src: '/assets/icons/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: '/assets/icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any maskable'
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,png,json,ico}'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'iobranch_images_cache',
-              expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 60 * 60 }
-            }
-          }
-        ]
-      }
-    })
-  ]
-});
-```
-
-### 5.2 Konfigurasi Penggelaran Vercel (`vercel.json`)
-```json
-{
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "headers": [
-    {
-      "source": "/sw.js",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/" }
-      ]
-    }
-  ],
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}
-```
+### 5.2 Konfigurasi Deployment Vercel (`vercel.json`)
+* Menerapkan aturan rute SPA bersih (*clean URLs*) yang mengarahkan seluruh permintaan rute ke `index.html`.
+* Menyematkan header keamanan dan perizinan Service Worker: `Service-Worker-Allowed: /`.
 
 ---
 
 ## 6. Uji Ketahanan Sistem & Penanganan Kasus Ekstrem (*Resilience Tests*)
 
 Sesuai standar Craftsmanship Anti-Slop **C-4 (Resilience)**:
-1. **Validasi Input Ekstrem:**
-   * Input teks huruf pada kotak angka otomatis dibersihkan / ditolak.
-   * Input angka negatif atau 0 tetap diproses secara matematis benar tanpa memicu error `NaN`.
-2. **Uji Layar Sempit (Resolusi 360 px):**
-   * Di layar HP sempit, canvas game otomatis menyesuaikan aspek rasio, dan form kontrol di bawahnya dapat di-scroll vertikal secara mulus tanpa elemen tombol terpotong.
-3. **Uji Mode Pesawat (*Airplane Mode Test*):**
-   * Saat internet dimatikan total, murid dapat memuat ulang aplikasi dan seluruh aset gambar tileset, suara 8-bit, serta data soal tetap dapat dijalankan 100% luring.
-4. **Uji Pergantian Perangkat (*Device Switch Test*):**
-   * Tombol "Ganti Pasangan" menghapus sesi di `IndexedDB` dan membawa aplikasi kembali ke layar Onboarding tanpa merusak file cache aplikasi.
+1. **Validasi Masukan Ekstrem:**
+   * Masukan huruf pada kolom angka dibersihkan otomatis tanpa memicu galat `NaN`.
+   * Nilai angka 0, minus, atau di luar ambang batas diproses secara matematis benar.
+2. **Uji Resolusi Layar Ponsel Sempit (360 px):**
+   * Di layar HP sempit (360 px), kanvas game tetap stabil di bagian atas dan formulir kontrol di bawahnya dapat di-scroll lancar tanpa ada teks atau tombol yang terpotong.
+3. **Uji Ketahanan Luring Total:**
+   * Saat koneksi internet dimatikan total, seluruh 12 layar, simulasi penelusuran, audio 8-bit, dan penyimpanan IndexedDB berfungsi normal tanpa kendala.
+4. **Uji Pergantian Sesi Tim:**
+   * Fitur ganti tim di menu pengaturan mereset data sesi secara bersih dan siap digunakan oleh pasangan murid berikutnya.
 
 ---
 
-## 7. Matriks Penyelarasan Riset Tindakan Kelas (PTK Traceability)
+## 7. Status Dokumen
 
-| Komponen Teknis `iobranch` | Korelasi Langsung pada PTK Kelas X-10 |
-|---|---|
-| **Peta Persimpangan Tiled & Hero Waypoint** | Membantu murid memvisualisasikan eksekusi baris kondisi secara konkret, mendukung pencapaian **IKTP-1 (Konsep & Operator)**. |
-| **Stepper Penyorot Baris Kode & Dimmed Branch** | Melatih keterampilan penalaran langkah demi langkah secara mendalam, mendukung pencapaian **IKTP-2 (Code Tracing & Jalur)**. |
-| **Adaptive Scaffolding Hint di Kotak Konsol** | Membimbing murid merefleksikan letak kesalahan logika saat tebakan meleset, mendukung pencapaian **IKTP-3 (Analisis Kesalahan)**. |
-| **Branch Coverage 2-Star Badge System** | Memotivasi pasangan murid menguji seluruh percabangan (`IF` dan `ELSE`), mendukung pencapaian **IKTP-4 (Kasus Uji Menyeluruh)**. |
-| **Offline PWA + Workbox + IndexedDB** | Menjamin kelancaran intervensi tindakan di kelas tanpa hambatan kuota, mendukung peningkatan nilai **$N\text{-Gain} \ge 0{,}30$**. |
-| **Estetika 2D Pixel Art Retro GBA** | Menciptakan suasana belajar yang menggembirakan (*Joyful Learning*), mendukung capaian **Angket Persepsi Media ($\text{Rerata} \ge 3{,}00$)**. |
-
----
-
-## 8. Status Dokumen & Langkah Selanjutnya
-
-Dokumen `SDD.md` ini telah resmi menetapkan seluruh cetak biru rekayasa perangkat lunak untuk aplikasi **`iobranch`**. Dokumen ini menjadi acuan mutlak sebelum tahap implementasi kode program dimulai pada sesi kerja berikutnya.
+Dokumen `SDD.md` versi 2.0.0 ini merupakan cetak biru resmi yang merefleksikan 100% kondisi nyata kode sumber aplikasi **`iobranch`**. Dokumen ini menjadi acuan mutlak bagi pelaksanaan dan analisis Penelitian Tindakan Kelas (PTK) Informatika SMA.

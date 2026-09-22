@@ -88,7 +88,7 @@ export const MATERI_BANK: MateriTopic[] = [
       },
       {
         heading: 'Notasi Naratif (Bahasa Alami Manusia)',
-        content: 'Notasi naratif menyajikan langkah algoritma memakai bahasa sehari-hari yang terstruktur. Pendekatan ini sangat cocok saat kamu sedang berdiskusi ide awal bersama teman kelompok sebelum mulai mengetik kode pemrograman.',
+        content: 'Notasi naratif menyajikan langkah algoritma memakai bahasa sehari-hari yang terstruktur. Pendekatan ini sangat cocok saat kalian sedang berdiskusi ide awal bersama teman kelompok sebelum mulai mengetik kode pemrograman.',
         codeSnippet: {
           language: 'Contoh Naratif: Gerbang Otomatis Stasiun',
           code: `Langkah 1: Penumpang menempelkan kartu e-money pada sensor gerbang.
@@ -136,8 +136,8 @@ int main() {
         }
       }
     ],
-    proTips: 'Komputer membaca instruksi persis seperti kamu membaca buku: baris demi baris dari paling atas ke paling bawah. Pastikan tidak ada langkah penting yang terlewat!',
-    misconceptionWarning: 'Komputer tidak memiliki firasat atau akal budi. Jika kamu menulis instruksi yang ambigu, komputer tidak akan menebak maksudmu melainkan langsung menghasilkan kesalahan (bug).',
+    proTips: 'Komputer membaca instruksi persis seperti kita membaca buku: baris demi baris dari paling atas ke paling bawah. Pastikan tidak ada langkah penting yang terlewat!',
+    misconceptionWarning: 'Komputer tidak memiliki firasat atau akal budi. Jika instruksi yang ditulis ambigu, komputer tidak akan menebak maksud pembuatnya melainkan langsung menghasilkan kesalahan (bug).',
     interactiveCheck: {
       question: 'Apakah instruksi "Aduk gula sampai manisnya pas secukupnya" memenuhi syarat Definiteness (Kepastian) pada algoritma komputer?',
       options: [
@@ -220,11 +220,11 @@ SELESAI JIKA`,
     subtitle: 'Jembatan Pemikiran Logika ke Bahasa Pemrograman Formal',
     badgeLabel: 'PRASYARAT 3',
     summary: 'Pseudokode (kode semu) adalah cara menuliskan logika pemrograman menggunakan kata-kata sederhana yang mirip dengan kode program sungguhan, namun tanpa dibebani kerumitan tanda baca bahasa tertentu.',
-    analogies: 'Pseudokode seperti coret-coretan naskah kasar sebelum naskah pidato diketik rapi. Kamu fokus pada jalan cerita logikanya, bukan pada aturan titik koma kompilator.',
+    analogies: 'Pseudokode seperti coret-coretan naskah kasar sebelum naskah pidato diketik rapi. Kalian fokus pada jalan cerita logikanya, bukan pada aturan titik koma kompilator.',
     sections: [
       {
         heading: 'Mengapa Pseudokode Sangat Membantu Murid SMA?',
-        content: 'Saat baru belajar koding, murid sering pusing memikirkan koma, titik dua, atau kurung kurawal <code>{}</code>. Dengan pseudokode, kamu bisa melatih daya nalar logika terlebih dahulu. Begitu logikanya sudah benar, mengubah ke Bahasa C, Python, atau Javascript akan terasa sangat mudah!'
+        content: 'Saat baru belajar koding, murid sering pusing memikirkan koma, titik dua, atau kurung kurawal <code>{}</code>. Dengan pseudokode, kalian bisa melatih daya nalar logika terlebih dahulu. Begitu logikanya sudah benar, mengubah ke Bahasa C, Python, atau Javascript akan terasa sangat mudah!'
       },
       {
         heading: 'Perbandingan 3 Bentuk Penulisan Algoritma',
@@ -295,7 +295,7 @@ int main() {
     sections: [
       {
         heading: '4 Tipe Data Dasar yang Paling Sering Digunakan',
-        content: 'Berikut jenis tipe data dasar yang wajib kamu kuasai:',
+        content: 'Berikut jenis tipe data dasar yang wajib dikuasai oleh murid:',
         tableData: {
           headers: ['Tipe Data', 'Pengertian Sederhana', 'Contoh Nilai Nyata', 'Penerapan di Game Ini'],
           rows: [
@@ -444,13 +444,13 @@ SELESAI JIKA`,
     subtitle: 'Cara Komputer Memilih Jalur Keputusan di Persimpangan',
     badgeLabel: 'MODUL 1',
     summary: 'Struktur percabangan (Branching) membuat program komputer tidak lagi berjalan kaku secara lurus saja, melainkan mampu mengambil keputusan arah instruksi berdasarkan pengujian kondisi yang bernilai benar (TRUE) atau salah (FALSE).',
-    analogies: 'Sama seperti saat kamu bermain game RPG: di sebuah persimpangan gua, JIKA kamu punya kunci emas MAKA pintu rahasia terbuka, LAINNYA kamu harus mencari jalan memutar.',
+    analogies: 'Sama seperti saat berpetualang: di sebuah persimpangan gua, JIKA tim memiliki kunci emas MAKA pintu rahasia terbuka, LAINNYA tim harus mencari jalan memutar.',
     sections: [
       {
         heading: 'Mengapa Percabangan Sangat Penting?',
         content: 'Dunia nyata penuh dengan situasi kondisional:<br />' +
-          '• Jika baterai HP di bawah 20% &rarr; Aktifkan mode hemat daya.<br />' +
-          '• Jika umur penonton minimal 17 tahun &rarr; Izinkan akses konten.<br />' +
+          '• Jika baterai HP di bawah 20%: Aktifkan mode hemat daya.<br />' +
+          '• Jika umur penonton minimal 17 tahun: Izinkan akses konten.<br />' +
           'Tanpa percabangan, teknologi pintar seperti smartphone, sensor pintu otomatis, dan lampu lalu lintas tidak akan bisa berfungsi.'
       },
       {
@@ -560,7 +560,7 @@ SELESAI JIKA`,
     subtitle: 'Memilih Satu dari Dua Pilihan yang Saling Menolak',
     badgeLabel: 'MODUL 3',
     summary: 'Percabangan ganda (IF-ELSE Dua Arah) membagi aliran program menjadi dua pilihan yang saling menolak: Blok IF dijalankan jika kondisi TRUE, sedangkan Blok ELSE dijalankan jika kondisi FALSE.',
-    analogies: 'Seperti saklar lampu di dinding kamarmu: Saklar hanya bisa berada di salah satu posisi: JIKA saklar naik maka lampu MENYALA, LAINNYA lampu PADAM. Mustahil lampu menyala sekaligus padam bersamaan!',
+    analogies: 'Seperti saklar lampu di dinding ruangan: Saklar hanya bisa berada di salah satu posisi: JIKA saklar naik maka lampu MENYALA, LAINNYA lampu PADAM. Mustahil lampu menyala sekaligus padam bersamaan!',
     sections: [
       {
         heading: 'Struktur Dua Pilihan Mutlak',
@@ -675,7 +675,7 @@ SELESAI JIKA`,
     ],
     diagramType: 'flowchart_nested',
     proTips: 'Urutan menulis ELSE IF sangat krusial! Selalu tulis kondisi dengan angka batas tertinggi lebih dulu jika menguji nilai kelulusan bertingkat.',
-    misconceptionWarning: 'Jika kamu menulis "nilai >= 60" di urutan paling atas, maka murid yang nilainya 95 pun akan langsung dimasukkan ke Grade C dan tidak pernah sampai ke pemeriksaan Grade A!'
+    misconceptionWarning: 'Jika urutan penulisan "nilai >= 60" ditaruh di paling atas, maka murid yang nilainya 95 pun akan langsung dimasukkan ke Grade C dan tidak pernah sampai ke pemeriksaan Grade A!'
   },
 
   {
@@ -687,7 +687,7 @@ SELESAI JIKA`,
     title: 'Analisis Alur & Teknik Telusur Bebas Bug (Siklus 2)',
     subtitle: 'Strategi Menemukan Kesalahan Logika Tanpa Perlu Menebak',
     badgeLabel: 'MODUL 5',
-    summary: 'Dalam petualangan logika pemrograman, kebiasaan buruk yang harus dihindari adalah menebak-nebak hasil akhir program secara spekulatif. Melalui teknik Telusur (penelusuran baris demi baris), kamu dilatih melacak nilai variabel secara ilmiah.',
+    summary: 'Dalam petualangan logika pemrograman, kebiasaan buruk yang harus dihindari adalah menebak-nebak hasil akhir program secara spekulatif. Melalui teknik Telusur (penelusuran baris demi baris), kalian dilatih melacak nilai variabel secara ilmiah.',
     analogies: 'Telusur seperti rekaman VAR (Video Assistant Referee) di pertandingan sepak bola: mengulang kejadian detik demi detik secara lambat untuk memastikan keputusan mana yang benar-benar terjadi.',
     sections: [
       {
@@ -731,8 +731,8 @@ if (nilaiUjian > 75) { // SALAH! Seharusnya >= 75
         }
       }
     ],
-    proTips: 'Jika programmu menghasilkan keluaran yang salah, jangan langsung ubah kode secara acak! Buka Lab Telusur, amati baris kondisi yang sedang aktif, dan cek apakah evaluasinya bernilai True atau False.',
-    misconceptionWarning: 'Bug logika tidak bisa dideteksi otomatis oleh kompilator komputer. Hanya nalar logikamu yang dapat membuktikan kebenarannya!'
+    proTips: 'Jika program menghasilkan keluaran yang salah, jangan langsung ubah kode secara acak! Buka Lab Telusur, amati baris kondisi yang sedang aktif, dan cek apakah evaluasinya bernilai True atau False.',
+    misconceptionWarning: 'Bug logika tidak bisa dideteksi otomatis oleh kompilator komputer. Hanya nalar logika murid yang dapat membuktikan kebenarannya!'
   }
 ];
 

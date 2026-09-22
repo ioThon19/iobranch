@@ -70,15 +70,15 @@ export class FlowgorithmView {
         <!-- Indikator Legenda Simbol -->
         <div style="display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-muted); font-family: var(--font-code); flex-wrap: wrap;">
           <span style="display: inline-flex; align-items: center; gap: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 2px; background: #10b981;"></span>
+            <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--success);"></span>
             True (Benar)
           </span>
           <span style="display: inline-flex; align-items: center; gap: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 2px; background: #ef4444;"></span>
+            <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--danger);"></span>
             False (Salah)
           </span>
           <span style="display: inline-flex; align-items: center; gap: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 2px; background: #f59e0b;"></span>
+            <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--warning);"></span>
             Aktif
           </span>
         </div>

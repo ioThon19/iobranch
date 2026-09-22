@@ -105,7 +105,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
           activeBranch: 'INIT'
         });
       } else if (line.lineNumber === 2) {
-        const evalText = `${inputVal} >= 50 -> ${isCond1True ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}`;
+        const evalText = `${inputVal} >= 50 : bernilai ${isCond1True ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}`;
         steps.push({
           stepNumber: stepIndex++,
           lineNumber: line.lineNumber,
@@ -135,7 +135,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
         if (isCond1True) {
           skippedLineNumbers.push(line.lineNumber);
         } else {
-          const evalText = `${inputVal} >= 20 -> ${isCond2True ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}`;
+          const evalText = `${inputVal} >= 20 : bernilai ${isCond2True ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}`;
           steps.push({
             stepNumber: stepIndex++,
             lineNumber: line.lineNumber,
@@ -362,7 +362,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
         activeBranch: 'INIT'
       });
     } else if (line.branchType === 'CONDITION') {
-      const evalText = `${inputVal} ${op} ${boundaryValue} -> ${conditionResult ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}`;
+      const evalText = `${inputVal} ${op} ${boundaryValue} : bernilai ${conditionResult ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}`;
       steps.push({
         stepNumber: stepIndex++,
         lineNumber: line.lineNumber,

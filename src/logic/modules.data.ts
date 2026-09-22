@@ -7,7 +7,7 @@ export const CASE_MODULES: CaseModule[] = [
     title: 'Gerbang Tiket Stasiun MRT',
     cycleRequired: 1,
     concept: 'Operator Relasional & Evaluasi Boolean',
-    storyPrompt: 'Kamu berada di depan gerbang stasiun MRT. Untuk dapat masuk ke peron, penumpang harus menempelkan kartu dengan saldo minimal Rp4.000. Ujilah apakah kartumu dapat membuka gerbang.',
+    storyPrompt: 'Kalian berada di depan gerbang stasiun MRT. Untuk dapat masuk ke peron, penumpang harus menempelkan kartu dengan saldo minimal Rp4.000. Ujilah apakah kartu tim dapat membuka gerbang.',
     inputVariable: 'saldo',
     inputLabel: 'Saldo Kartu (Rp)',
     defaultInput: 5000,
@@ -305,8 +305,8 @@ export const CASE_MODULES: CaseModule[] = [
     ],
     hints: {
       level1: 'Perhatikan nomor pilihan yang ditekan pada mesin minuman.',
-      level2: 'Switch-case langsung mencocokkan angka pilihanmu dengan menu (case) yang sesuai.',
-      level3: 'Pilihan STANDAR (default) otomatis dipilih jika nomor menu yang kamu masukkan tidak ada di daftar (misal angka 4 atau 9).'
+      level2: 'Switch-case langsung mencocokkan angka pilihan tim dengan menu (case) yang sesuai.',
+      level3: 'Pilihan STANDAR (default) otomatis dipilih jika nomor menu yang dimasukkan tidak ada di daftar (misal angka 4 atau 9).'
     }
   }
 ];

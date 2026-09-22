@@ -130,25 +130,25 @@ export class StorageService {
   }
 
   /**
-   * Menyimpan kemajuan pengujian jalur kondisi (branch coverage) dan memberi hadiah XP
+   * Menyimpan kemajuan pengujian jalur kondisi (branch coverage)
    */
   public static async saveModuleCoverage(
     moduleId: string,
     branches: string[],
-    xpReward = 0
+    _reward = 0
   ): Promise<ModuleProgress> {
     const progressMap = (await safeGet<Record<string, ModuleProgress>>(STORAGE_KEYS.PROGRESS, {})) || {};
     const prevProgress = progressMap[moduleId];
     const prevBranches = prevProgress ? prevProgress.testedBranches : [];
     const mergedBranches = Array.from(new Set([...prevBranches, ...branches]));
-    const stars = mergedBranches.length >= 2 ? 2 : mergedBranches.length;
-    const isCompleted = mergedBranches.length >= 2;
+    const stars = mergedBranches.length >= 2 ? 2 : (mergedBranches.length >= 1 ? 1 : 0);
+    const isCompleted = mergedBranches.length >= 1;
 
     const updatedModule: ModuleProgress = {
       testedBranches: mergedBranches,
       stars,
       isCompleted,
-      xpEarned: (prevProgress ? prevProgress.xpEarned : 0) + xpReward,
+      xpEarned: 0,
       updatedAt: Date.now()
     };
 
@@ -158,14 +158,6 @@ export class StorageService {
     // Tandai langkah tracing selesai jika sudah menguji cabang
     if (mergedBranches.length >= 1) {
       await this.saveProgressionState({ stepTracingCompleted: true });
-    }
-
-    // Perbarui akumulasi XP dan level pada sesi pasangan jika ada reward
-    const currentSession = await this.getSession();
-    if (currentSession && xpReward > 0) {
-      currentSession.totalXp += xpReward;
-      currentSession.currentLevel = Math.floor(currentSession.totalXp / 100) + 1;
-      await this.saveSession(currentSession);
     }
 
     return updatedModule;
@@ -249,23 +241,28 @@ export class StorageService {
     const cycle = await this.getCycleState();
     const isCycle2 = cycle === 2;
 
-    // 1. Nilai Telusur (0–100): Ketercapaian Bintang 2 pada modul kasus aktif
-    const starsMod1 = allProgress['m01']?.stars || allProgress['kasus-1']?.stars || 0;
-    const starsMod2 = allProgress['m02']?.stars || allProgress['kasus-2']?.stars || 0;
-    const starsMod3 = allProgress['m03']?.stars || allProgress['kasus-3']?.stars || 0;
-    const starsMod4 = allProgress['m04']?.stars || 0;
-    const starsMod5 = allProgress['m05']?.stars || 0;
+    // 1. Nilai Telusur (0–100): Sistem Pembobotan Kasus Kontekstual Sesuai Siklus Aktif
+    const isMod1Done = (allProgress['m01']?.testedBranches?.length || 0) >= 1 || !!allProgress['m01']?.isCompleted;
+    const isMod2Done = (allProgress['m02']?.testedBranches?.length || 0) >= 1 || !!allProgress['m02']?.isCompleted;
+    const isMod3Done = (allProgress['m03']?.testedBranches?.length || 0) >= 1 || !!allProgress['m03']?.isCompleted;
+    const isMod4Done = (allProgress['m04']?.testedBranches?.length || 0) >= 1 || !!allProgress['m04']?.isCompleted;
+    const isMod5Done = (allProgress['m05']?.testedBranches?.length || 0) >= 1 || !!allProgress['m05']?.isCompleted;
 
     let tracingScore = 0;
     if (isCycle2) {
-      // Siklus 2: 5 Modul (m01..m05), total 10 bintang = 100 poin
-      const totalStars = starsMod1 + starsMod2 + starsMod3 + starsMod4 + starsMod5;
-      tracingScore = Math.min(100, Math.round((totalStars / 10) * 100));
+      // Siklus 2: 5 Kasus (Kasus 1: 15, Kasus 2: 15, Kasus 3: 20, Kasus 4: 25, Kasus 5: 25) -> Total 100
+      if (isMod1Done) tracingScore += 15;
+      if (isMod2Done) tracingScore += 15;
+      if (isMod3Done) tracingScore += 20;
+      if (isMod4Done) tracingScore += 25;
+      if (isMod5Done) tracingScore += 25;
     } else {
-      // Siklus 1: 3 Modul (m01..m03), total 6 bintang = 100 poin
-      const totalStars = starsMod1 + starsMod2 + starsMod3;
-      tracingScore = Math.min(100, Math.round((totalStars / 6) * 100));
+      // Siklus 1: 3 Kasus Wajib (Kasus 1: 30, Kasus 2: 30, Kasus 3: 40) -> Total 100
+      if (isMod1Done) tracingScore += 30;
+      if (isMod2Done) tracingScore += 30;
+      if (isMod3Done) tracingScore += 40;
     }
+    tracingScore = Math.min(100, tracingScore);
 
     // 2. Nilai Tantangan (0–100): Selesai 5 ronde pertempuran logika
     const isBattleDone = !!(progState.stepBattleCompleted || saved?.isBattleLocked);
@@ -292,6 +289,23 @@ export class StorageService {
     };
 
     return scores;
+  }
+
+  /**
+   * Mengambil jumlah bintang capaian telusur berdasarkan skor formatif telusur dan siklus aktif:
+   * - Siklus 1: Selesai Kasus 1 & 2 (Skor >= 60) = 1 Bintang; Selesai Kasus 3 (Skor 100) = 2 Bintang.
+   * - Siklus 2: Selesai Kasus 1, 2, & 3 (Skor >= 50) = 1 Bintang; Selesai seluruh 5 kasus (Skor 100) = 2 Bintang.
+   */
+  public static getTracingStars(tracingScore: number, isCycle2 = false): number {
+    if (isCycle2) {
+      if (tracingScore >= 100) return 2;
+      if (tracingScore >= 50) return 1;
+      return 0;
+    } else {
+      if (tracingScore >= 100) return 2;
+      if (tracingScore >= 60) return 1;
+      return 0;
+    }
   }
 
   /**
@@ -376,19 +390,45 @@ export class StorageService {
     const mod1 = allProgress['m01'] || allProgress['kasus-1'];
     const mod2 = allProgress['m02'] || allProgress['kasus-2'];
     const mod3 = allProgress['m03'] || allProgress['kasus-3'];
-
-    const starsMod1 = mod1?.stars || 0;
-    const starsMod2 = mod2?.stars || 0;
-    const starsMod3 = mod3?.stars || 0;
+    const mod4 = allProgress['m04'];
+    const mod5 = allProgress['m05'];
 
     const branchesMod1 = (mod1?.testedBranches || []).join(', ') || 'Belum Diuji';
     const branchesMod2 = (mod2?.testedBranches || []).join(', ') || 'Belum Diuji';
     const branchesMod3 = (mod3?.testedBranches || []).join(', ') || 'Belum Diuji';
+    const branchesMod4 = (mod4?.testedBranches || []).join(', ') || 'Belum Diuji';
+    const branchesMod5 = (mod5?.testedBranches || []).join(', ') || 'Belum Diuji';
+
+    const isMod1Done = (mod1?.testedBranches || []).length >= 1 || !!mod1?.isCompleted;
+    const isMod2Done = (mod2?.testedBranches || []).length >= 1 || !!mod2?.isCompleted;
+    const isMod3Done = (mod3?.testedBranches || []).length >= 1 || !!mod3?.isCompleted;
+    const isMod4Done = (mod4?.testedBranches || []).length >= 1 || !!mod4?.isCompleted;
+    const isMod5Done = (mod5?.testedBranches || []).length >= 1 || !!mod5?.isCompleted;
 
     const formatRow = (label: string, value: string | number, width = 68): string => {
       const line = `|  ${label.padEnd(46, ' ')} : ${String(value).padStart(16, ' ')}  |`;
       return line.slice(0, width + 2);
     };
+
+    const moduleRows: string[] = [
+      formatRow(`Modul 1: Percabangan IF (Bobot ${cycle === 2 ? '15' : '30'} Poin)`, isMod1Done ? 'TUNTAS' : 'BELUM SELESAI'),
+      formatRow('         Jalur Cabang Teruji', branchesMod1),
+      formatRow(`Modul 2: Percabangan IF-ELSE (Bobot ${cycle === 2 ? '15' : '30'} Poin)`, isMod2Done ? 'TUNTAS' : 'BELUM SELESAI'),
+      formatRow('         Jalur Cabang Teruji', branchesMod2),
+      formatRow(`Modul 3: Kasus Kontekstual (Bobot ${cycle === 2 ? '20' : '40'} Poin)`, isMod3Done ? 'TUNTAS' : 'BELUM SELESAI'),
+      formatRow('         Jalur Cabang Teruji', branchesMod3)
+    ];
+
+    if (cycle === 2) {
+      moduleRows.push(
+        formatRow('Modul 4: Percabangan Bertingkat (Bobot 25 Poin)', isMod4Done ? 'TUNTAS' : 'BELUM SELESAI'),
+        formatRow('         Jalur Cabang Teruji', branchesMod4),
+        formatRow('Modul 5: Switch-Case Multi-Kategori (Bobot 25 Poin)', isMod5Done ? 'TUNTAS' : 'BELUM SELESAI'),
+        formatRow('         Jalur Cabang Teruji', branchesMod5)
+      );
+    }
+
+    const tracingStars = StorageService.getTracingStars(formative.tracingScore, cycle === 2);
 
     const content = [
       '======================================================================',
@@ -404,7 +444,7 @@ export class StorageService {
       '----------------------------------------------------------------------',
       '                 REKAPITULASI NILAI FORMATIF (SKALA 1-100)            ',
       '----------------------------------------------------------------------',
-      formatRow(`1. Nilai Telusur (${cycle === 2 ? 'Modul 1-5' : 'Modul 1-3'})`, `${formative.tracingScore} / 100`),
+      formatRow(`1. Nilai Telusur (${cycle === 2 ? 'Modul 1-5' : 'Modul 1-3'})`, `${formative.tracingScore} / 100 (${tracingStars} / 2 Bintang)`),
       formatRow('2. Nilai Tantangan (Battle 5 Ronde Logika)', `${formative.battleScore} / 100`),
       formatRow('3. Nilai Evaluasi (5 Soal Pilihan Ganda)', `${formative.evaluasiScore} / 100`),
       '----------------------------------------------------------------------',
@@ -414,12 +454,7 @@ export class StorageService {
       '----------------------------------------------------------------------',
       '                 RINCIAN CAKUPAN PENGUJIAN CABANG (TELUSUR)            ',
       '----------------------------------------------------------------------',
-      formatRow('Modul 1: Percabangan Tunggal IF (Stars)', `${starsMod1} / 2 Bintang`),
-      formatRow('         Jalur Cabang Teruji', branchesMod1),
-      formatRow('Modul 2: Percabangan Ganda IF-ELSE (Stars)', `${starsMod2} / 2 Bintang`),
-      formatRow('         Jalur Cabang Teruji', branchesMod2),
-      formatRow('Modul 3: Studi Kasus Kontekstual (Stars)', `${starsMod3} / 2 Bintang`),
-      formatRow('         Jalur Cabang Teruji', branchesMod3),
+      ...moduleRows,
       '======================================================================',
       formatRow('Tautan Pengumpulan Google Drive Guru', driveUrl),
       '======================================================================',
