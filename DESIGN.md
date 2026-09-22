@@ -2,7 +2,7 @@
 ## iobranch — Interactive 2D Pixel Art Logic Tracer PWA
 
 **Nama Produk**: iobranch  
-**Versi Dokumen**: 2.0.0 (Sinkronisasi Desain Visual & Standar Mutu Anti-Slop)  
+**Versi Dokumen**: 2.1.0 (Sinkronisasi Practice Mode Badge, First-Attempt Lock, & Standar Mutu Anti-Slop)  
 **Status**: Approved Design System Standard  
 **Prinsip Desain**: Mengadopsi Standar **Anti-Slop** ([github.com/miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop))  
 **Target Riset Tindakan**: PTK Informatika Kelas X-10 SMA (46 Murid, 23 Pasangan *Pair Programming*)  
@@ -206,12 +206,20 @@ Mengacu pada aturan mutu proyek, kartu antarmuka menolak garis aksen warna tebal
 ### Layar 05: Lab Telusur Kode Visual & Diagram Alir Flowgorithm SVG
 * **Tujuan**: Simulator penelusuran logika langkah demi langkah yang membuktikan jalannya alur percabangan.
 * **Komposisi**:
+  * Pita Panduan Alur Belajar (*Pedagogical Stepper Ribbon*): 4 langkah berurutan (Pilih Kasus -> Tentukan Masukan -> Perkirakan Jalur -> Buktikan di Meja Kerja).
   * Selector Kasus Terpadu: Kasus 1 (30 poin), Kasus 2 (30 poin), Kasus 3 (40 poin).
   * Input Nilai Variabel Uji & Gerbang Berkesadaran (*Mindful Predict-First*).
   * Editor Kode Tracing dengan penyorot baris aktif dan pemudaran cabang yang dilompati.
   * Diagram Alir Flowgorithm SVG dinamis yang menyala sinkron dengan baris kode yang sedang dieksekusi.
   * Konsol Terminal Keluaran Waktu Nyata.
   * Pelacak Cakupan Cabang (Branch Coverage Bar): Bintang 1 (Skor >= 60) dan Bintang 2 (Skor 100).
+* **Badge Identitas Sesi (Hero Card Header)**:
+  * `Lab Formatif` (warna `var(--success)`, background hijau muda): Ditampilkan saat sesi resmi aktif, `isTracingLocked === false`.
+  * `Mode Latihan` (warna `var(--text-muted)`, background abu-abu netral): Ditampilkan saat murid kembali ke lab setelah sesi resmi selesai, `isTracingLocked === true`.
+* **Modal Mode Latihan**: Ditampilkan otomatis (delay 120 ms) saat memasuki lab dalam keadaan `isTracingLocked === true`. Judul: *"Mode Latihan Lab Telusur"*. Murid diarahkan bahwa nilai resmi sudah aman dan mereka bebas berlatih.
+* **Aturan Pencatatan Nilai (Hypothesis-Gated Scoring)**:
+  * Nilai & bintang HANYA dicatat jika prediksi hipotesis murid BENAR (`userPrediction === executedBranch`).
+  * Jika hipotesis salah: simulasi tetap berjalan, cabang masuk `exploredBranches` (untuk akses Tantangan), tetapi tidak mengurangi atau menambah skor.
 
 ### Layar 06: Pertarungan Logika (Branching Battle RPG Challenge)
 * **Tujuan**: Menguji ketangkasan evaluasi kondisi murid melalui pertarungan giliran melawan Bug Monster.
@@ -219,7 +227,9 @@ Mengacu pada aturan mutu proyek, kartu antarmuka menolak garis aksen warna tebal
   * 5 Ronde Pertarungan Terstruktur dengan aturan evaluasi kondisi dinamis.
   * Bilah HP Hero dan Bug Monster.
   * Skor tantangan tercatat 0–100 pada sistem penilaian formatif tim.
-  * Mode Latihan Mandiri pasca-kemenangan pertama untuk memperdalam pemahaman.
+  * Badge identitas sesi: `Tantangan Formatif` (hijau) saat sesi resmi aktif; `Mode Latihan` (abu-abu) saat `isBattleLocked === true`.
+  * Modal "Mode Latihan Tantangan" ditampilkan otomatis saat murid kembali setelah pernah menang.
+  * Skor resmi dikunci via *First-Attempt Lock* (`isBattleLocked`); sesi latihan tidak mengubah skor.
 
 ### Layar 07: Kuis Evaluasi Formatif Mandiri (Formative Quiz)
 * **Tujuan**: Mengukur pemahaman kognitif mandiri melalui 5 butir soal pilihan ganda reflektif.
@@ -227,6 +237,8 @@ Mengacu pada aturan mutu proyek, kartu antarmuka menolak garis aksen warna tebal
   * 5 Butir Soal Berbobot Seimbang dengan sebaran kunci jawaban alami (C - A - B - D - B).
   * Pilihan jawaban radio yang nyaman disentuh dengan kontras jelas.
   * Umpan balik diagnostik langkah demi langkah pasca-submit soal.
+  * Modal "Mode Latihan Evaluasi" ditampilkan otomatis saat murid kembali mengerjakan setelah sesi resmi selesai (`isEvaluasiLocked === true`).
+  * Skor resmi dikunci via *First-Attempt Lock* (`isEvaluasiLocked`); pengerjaan ulang tidak mengubah nilai formatif.
 
 ### Layar 08: Dasbor Capaian Belajar & Lencana Prestasi (Progress Dashboard)
 * **Tujuan**: Pusat rekapitulasi penilaian formatif kelompok dan ekspor bukti belajar ke LKPD fisik.
@@ -296,4 +308,4 @@ Aplikasi beradaptasi pada tiga mode tampilan perangkat:
 
 ## 6. Status Dokumen & Ketetapan Rekayasa
 
-Dokumen `DESIGN.md` versi 2.0.0 ini merupakan **standar desain visual acuan mutlak** yang mengikat seluruh kode dan antarmuka aplikasi **`iobranch`**. Seluruh komponen yang diuraikan di atas telah terimplementasi secara presisi pada kode sumber aplikasi dan siap digunakan untuk Penelitian Tindakan Kelas (PTK).
+Dokumen `DESIGN.md` versi 2.1.0 ini merupakan **standar desain visual acuan mutlak** yang mengikat seluruh kode dan antarmuka aplikasi **`iobranch`** per 22 September 2026. Seluruh komponen yang diuraikan di atas telah terimplementasi secara presisi pada kode sumber aplikasi -- termasuk badge `Mode Latihan` pada tiga pilar asesmen, sistem penguncian first-attempt, dan pemisahan semantik `testedBranches` vs `exploredBranches` -- dan siap digunakan untuk Penelitian Tindakan Kelas (PTK).

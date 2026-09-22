@@ -1212,9 +1212,6 @@ export class UIManager {
             <button id="btn-start-game" type="button" class="game-btn" style="width: 100%; min-height: 46px; font-size: 11.5px; background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); color: var(--text-muted); gap: 8px; cursor: pointer;" title="Baca panduan petualangan terlebih dahulu">
               ${renderPixelIcon('lock', 12, 'var(--text-muted)')} 2. Mulai Pendaftaran (Terkunci)
             </button>
-            <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
-              ${renderPixelIcon('gear', 14, 'var(--primary)')} Pengaturan Sistem
-            </button>
           ` : `
             <button id="btn-start-game" type="button" class="game-btn game-btn-gold" style="width: 100%; min-height: 48px; font-size: 12.5px; letter-spacing: 0.3px; font-family: var(--font-pixel);">
               ${renderPixelIcon('play', 12, '#ffffff')} ${this.session ? 'Lanjutkan Misi' : 'Mulai Pendaftaran'}
@@ -1225,16 +1222,19 @@ export class UIManager {
             <button id="btn-menu-panduan" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
               ${renderPixelIcon('help', 14, 'var(--primary)')} Panduan Petualangan ${hasReadGuide ? renderPixelIcon('check', 11, 'var(--success)') : ''}
             </button>
-            <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
-              ${renderPixelIcon('gear', 14, 'var(--primary)')} Pengaturan Sistem
-            </button>
-            ${this.session
+          `}
+          <a id="btn-menu-drive-lkpd" href="https://drive.google.com/drive/folders/1259eAOfYs9FZdFJxEUieCdBZTLI72rPr?hl=ID" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Folder Google Drive LKPD Siklus 1">
+            ${renderPixelIcon('drive', 14, 'var(--primary)')} Folder Drive LKPD Siklus 1
+          </a>
+          <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
+            ${renderPixelIcon('gear', 14, 'var(--primary)')} Pengaturan Sistem
+          </button>
+          ${this.session
         ? `<button id="btn-menu-reset" type="button" class="game-btn" style="width: 100%; min-height: 38px; background: transparent; border: 1.5px solid rgba(220, 38, 38, 0.4); color: var(--danger); font-size: 11.5px;">
-                      ${renderPixelIcon('refresh', 13, 'var(--danger)')} Ganti Identitas Tim
-                    </button>`
+                    ${renderPixelIcon('refresh', 13, 'var(--danger)')} Ganti Identitas Tim
+                  </button>`
         : ''
       }
-          `}
         </div>
 
         <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border-retro); font-family: var(--font-code); font-size: 10px; color: var(--text-muted); text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -1246,6 +1246,10 @@ export class UIManager {
 
     wrapper.querySelector('#hero-menu-logo')?.addEventListener('click', () => {
       this.handleLogoClick();
+    });
+
+    wrapper.querySelector('#btn-menu-drive-lkpd')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
     });
 
     wrapper.querySelector('#btn-menu-token')?.addEventListener('click', () => {
