@@ -1,5 +1,6 @@
 // src/services/AssessmentExportService.ts - Ekspor Data Formatif & Web Share API (SSOT: SDD.md Section 3.8 & PRD.md FR-10)
 import { StorageService } from './StorageService';
+import { sanitizeCsvCell } from '../utils/security';
 
 export interface ExportResult {
   filename: string;
@@ -55,17 +56,17 @@ export class AssessmentExportService {
     const row = [
       new Date().toISOString(),
       cycle,
-      `"${session?.pairId || 'Tim Belajar'}"`,
-      `"${session?.student1Name || 'Murid 1'}"`,
+      sanitizeCsvCell(session?.pairId || 'Tim Belajar'),
+      sanitizeCsvCell(session?.student1Name || 'Murid 1'),
       session?.student1Absen || 0,
-      `"${session?.student2Name || 'Murid 2'}"`,
+      sanitizeCsvCell(session?.student2Name || 'Murid 2'),
       session?.student2Absen || 0,
-      session?.teamSymbol || 'algoritma',
+      sanitizeCsvCell(session?.teamSymbol || 'algoritma'),
       formative.tracingScore,
       formative.battleScore,
       formative.evaluasiScore,
       formative.finalScore,
-      `"${formative.finalScore >= 75 ? 'TUNTAS' : 'SEDANG BERPROSES'}"`,
+      sanitizeCsvCell(formative.finalScore >= 75 ? 'TUNTAS' : 'SEDANG BERPROSES'),
       completedModulesCount,
       totalStars
     ].join(',');

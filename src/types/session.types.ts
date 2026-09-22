@@ -15,7 +15,8 @@ export interface StudentSession {
 }
 
 export interface ModuleProgress {
-  testedBranches: string[]; // ['IF', 'ELSE']
+  testedBranches: string[];   // Cabang yang TERBUKTI BENAR (menentukan nilai/stars)
+  exploredBranches?: string[]; // Cabang yang sudah dijelajahi (menentukan akses ke Tantangan)
   stars: number; // 0, 1, atau 2
   isCompleted: boolean;
   xpEarned: number;
@@ -48,6 +49,7 @@ export interface FormativeScores {
   evaluasiScore: number; // 0 - 100 (berdasarkan 5 soal evaluasi konseptual)
   finalScore: number;   // Rata-rata 3 pilar: Math.round((tracing + battle + evaluasi) / 3)
   evaluasiAttemptCount: number;
+  isTracingLocked: boolean;  // true = nilai telusur resmi sudah terkunci (first-attempt lock)
   isEvaluasiLocked: boolean;
   isBattleLocked: boolean;
   evaluasiAnswers?: number[];
