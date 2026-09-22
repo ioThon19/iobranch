@@ -13,6 +13,7 @@ import { SyntaxRenderer } from './SyntaxRenderer';
 import { CoverageView, MODULE_BRANCHES } from './CoverageView';
 import { FlowgorithmView } from './FlowgorithmView';
 import { renderTeamSymbolPixelArt, TEAM_SYMBOLS_DATA } from './TeamSymbolRenderer';
+import { escapeHtml, isValidSafeName, sanitizeWebUrl } from '../utils/security';
 
 export type PixelIconType =
   | 'book'
@@ -197,6 +198,7 @@ export class UIManager {
   private battleLog = 'Pilih aksi serangan yang sesuai dengan evaluasi kondisi.';
   private isBattleSessionActive = false;
   private isBattlePracticeMode = false;
+  private isTracingPracticeMode = false;
 
   // State Tab Dasbor Progres (Layar 08)
   private activeProgressTab: 'BADGES' | 'MODULES' | 'EXPORT' = 'BADGES';
@@ -258,7 +260,30 @@ export class UIManager {
       this.render();
     });
 
-    this.setScreen(this.currentScreen);
+    // Pemulihan layar aman saat peramban di-refresh
+    let initialScreen = this.currentScreen;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        const saved = window.sessionStorage.getItem('iobranch_active_screen') as ScreenId | null;
+        if (saved && this.isScreenUnlocked(saved) && saved !== 'BATTLE' && saved !== 'EVALUASI') {
+          initialScreen = saved;
+        }
+      }
+    } catch {
+      // Abaikan jika sessionStorage tidak didukung
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('beforeunload', (e) => {
+        if ((this.currentScreen === 'EVALUASI' && this.isEvaluasiSessionActive && this.selectedAnswer !== null) ||
+            (this.currentScreen === 'BATTLE' && this.isBattleSessionActive && this.currentBattleRound > 1)) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+    }
+
+    this.setScreen(initialScreen);
   }
 
   /**
@@ -420,7 +445,11 @@ export class UIManager {
     const requiredModuleIds = this.isCycle2Unlocked
       ? ['m01', 'm02', 'm03', 'm04', 'm05']
       : ['m01', 'm02', 'm03'];
-    return requiredModuleIds.every((id) => (this.allModuleProgress[id]?.stars || 0) >= 2);
+    // Akses terbuka jika semua kasus sudah dijelajahi (explored) ATAU terbukti benar (tested)
+    return requiredModuleIds.every((id) => {
+      const prog = this.allModuleProgress[id];
+      return (prog?.testedBranches?.length || 0) >= 1 || (prog?.exploredBranches?.length || 0) >= 1;
+    });
   }
 
   public setScreen(screen: ScreenId): void {
@@ -566,8 +595,11 @@ export class UIManager {
       }
     }
 
-    // Sinkronisasi realtime nilai formatif & progress saat membuka layar TRACING
+    // Inisialisasi status sesi saat membuka layar TRACING
     if (screen === 'TRACING') {
+      const isTracingAlreadyLocked = Boolean(this.formativeScores?.isTracingLocked);
+      this.isTracingPracticeMode = isTracingAlreadyLocked;
+
       void StorageService.getFormativeScores().then((scores) => {
         this.formativeScores = scores;
         const prog = this.allModuleProgress[this.activeModule.id] || {
@@ -579,6 +611,23 @@ export class UIManager {
         };
         this.coverageView.update(prog, this.activeModule.id, this.formativeScores.tracingScore, this.isCycle2Unlocked);
       });
+
+      // Tampilkan modal Mode Latihan jika nilai telusur sudah dikunci (sudah selesai sebelumnya)
+      if (isTracingAlreadyLocked) {
+        window.setTimeout(() => {
+          this.showCelebrationModal(
+            'Mode Latihan Lab Telusur',
+            'Tim kalian telah menyelesaikan misi Lab Telusur ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman penelusuran kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian.',
+            [
+              {
+                label: 'Mulai Latihan Mandiri',
+                isPrimary: true,
+                action: () => {}
+              }
+            ]
+          );
+        }, 120);
+      }
     }
 
     // Sinkronisasi realtime nilai formatif saat membuka layar PROGRES
@@ -593,6 +642,13 @@ export class UIManager {
 
     soundFx.playButtonBlip();
     this.currentScreen = screen;
+    try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        window.sessionStorage.setItem('iobranch_active_screen', screen);
+      }
+    } catch {
+      // Abaikan jika sessionStorage diblokir
+    }
     if (this.autoPlayTimer !== null) {
       window.clearInterval(this.autoPlayTimer);
       this.autoPlayTimer = null;
@@ -1097,8 +1153,8 @@ export class UIManager {
                 ${renderTeamSymbolPixelArt(this.session.teamSymbol, 28)}
               </div>
               <div>
-                <span class="eyebrow-label" style="color: var(--primary); font-size: 9px;">TIM ${this.session.teamSymbol.toUpperCase()}</span>
-                <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">${this.session.pairId} (${this.session.student1Name} & ${this.session.student2Name})</div>
+                <span class="eyebrow-label" style="color: var(--primary); font-size: 9px;">TIM ${escapeHtml(this.session.teamSymbol.toUpperCase())}</span>
+                <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">${escapeHtml(this.session.pairId)} (${escapeHtml(this.session.student1Name)} &amp; ${escapeHtml(this.session.student2Name)})</div>
               </div>
             </div>
             <span class="badge-pill" style="color: var(--primary); background: rgba(15, 118, 110, 0.08); border-color: rgba(15, 118, 110, 0.25); font-weight: 700; flex-shrink: 0;">
@@ -1336,7 +1392,7 @@ export class UIManager {
           Pembelajaran dibagi menjadi dua tahapan bertingkat. Kalian akan menguasai logika percabangan dasar terlebih dahulu sebelum melangkah ke percabangan majemuk yang lebih menantang:
         </p>
 
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px;">
           <!-- Kartu Siklus 1 -->
           <div style="padding: 16px 18px; border: 1px solid ${!this.isCycle2Unlocked ? 'rgba(15, 118, 110, 0.3)' : 'rgba(28, 25, 23, 0.08)'}; background-color: ${!this.isCycle2Unlocked ? 'var(--surface-panel)' : 'var(--surface-panel-alt)'}; border-radius: 10px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03); position: relative;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -1648,7 +1704,7 @@ export class UIManager {
             <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
               Nama Lengkap Murid 1:
             </label>
-            <input id="input-s1-name" type="text" class="pixel-input" placeholder="Nama Lengkap Murid 1" required style="width: 100%; min-height: 44px;" />
+            <input id="input-s1-name" type="text" maxlength="50" class="pixel-input" placeholder="Nama Lengkap Murid 1" required style="width: 100%; min-height: 44px;" />
           </div>
           <div>
             <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
@@ -1663,7 +1719,7 @@ export class UIManager {
             <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
               Nama Lengkap Murid 2:
             </label>
-            <input id="input-s2-name" type="text" class="pixel-input" placeholder="Nama Lengkap Murid 2" required style="width: 100%; min-height: 44px;" />
+            <input id="input-s2-name" type="text" maxlength="50" class="pixel-input" placeholder="Nama Lengkap Murid 2" required style="width: 100%; min-height: 44px;" />
           </div>
           <div>
             <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
@@ -1682,7 +1738,7 @@ export class UIManager {
               Logika Percabangan
             </span>
           </div>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+          <div class="onboarding-team-grid">
             ${(['algoritma', 'biner', 'matriks', 'vektor'] as TeamSymbol[]).map((sym, idx) => {
       const meta = TEAM_SYMBOLS_DATA[sym];
       const isSelected = idx === 0;
@@ -1755,11 +1811,29 @@ export class UIManager {
         this.showRetroToast('Nama lengkap kedua murid minimal 2 karakter!', false);
         return;
       }
+      if (s1Name.length > 50 || s2Name.length > 50) {
+        soundFx.playLogicFalse();
+        this.showRetroToast('Nama murid maksimal 50 karakter!', false);
+        return;
+      }
+      if (!isValidSafeName(s1Name) || !isValidSafeName(s2Name)) {
+        soundFx.playLogicFalse();
+        this.showRetroToast('Nama murid mengandung karakter tidak diizinkan!', false);
+        return;
+      }
+      if (s1Absen < 1 || s1Absen > 46 || s2Absen < 1 || s2Absen > 46 || Number.isNaN(s1Absen) || Number.isNaN(s2Absen)) {
+        soundFx.playLogicFalse();
+        this.showRetroToast('Nomor absen harus berada dalam rentang 1 sampai 46!', false);
+        return;
+      }
       if (s1Absen === s2Absen) {
         soundFx.playLogicFalse();
         this.showRetroToast('Nomor absen Murid 1 dan Murid 2 tidak boleh sama!', false);
         return;
       }
+
+      const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+      if (submitBtn) submitBtn.disabled = true;
 
       const symbol = ((modalContent.querySelector('input[name="symbol"]:checked') as HTMLInputElement)?.value || 'algoritma') as TeamSymbol;
 
@@ -1777,13 +1851,17 @@ export class UIManager {
         createdAt: Date.now()
       };
 
-      await StorageService.saveSession(newSession);
-      this.session = newSession;
-      this.progressionState = await StorageService.getProgressionState();
-      soundFx.playLogicTrue();
-      closeModal();
-      this.showRetroToast(`Pendaftaran berhasil! Selamat bergabung di Kota Harmoni, ${autoPairId}. Temui Pak Budi di SMA Harmoni!`, true);
-      this.setScreen('OVERWORLD');
+      try {
+        await StorageService.saveSession(newSession);
+        this.session = newSession;
+        this.progressionState = await StorageService.getProgressionState();
+        soundFx.playLogicTrue();
+        closeModal();
+        this.showRetroToast(`Pendaftaran berhasil! Selamat bergabung di Kota Harmoni, ${autoPairId}. Temui Pak Budi di SMA Harmoni!`, true);
+        this.setScreen('OVERWORLD');
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
     });
 
     modalBackdrop.appendChild(modalContent);
@@ -2218,10 +2296,10 @@ export class UIManager {
           </div>
           <div>
             <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
-              Sesi Pembimbingan: ${pairName}
+              Sesi Pembimbingan: ${escapeHtml(pairName)}
             </div>
             <div style="font-size: 11.5px; color: var(--text-secondary);">
-              Kolaborasi Penyelidik: <strong style="color: var(--primary); font-weight: 600;">${student1Name}</strong> &amp; <strong style="color: var(--primary); font-weight: 600;">${student2Name}</strong>
+              Kolaborasi Penyelidik: <strong style="color: var(--primary); font-weight: 600;">${escapeHtml(student1Name)}</strong> &amp; <strong style="color: var(--primary); font-weight: 600;">${escapeHtml(student2Name)}</strong>
             </div>
           </div>
         </div>
@@ -3583,6 +3661,9 @@ export class UIManager {
         <span class="eyebrow-label" style="color: var(--primary); flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;">
           ${renderPixelIcon('flask', 13, 'var(--primary)')} Langkah 1: Pilih Kasus
         </span>
+        <span class="badge-pill" style="color: ${this.isTracingPracticeMode ? 'var(--text-muted)' : 'var(--success)'}; font-weight: bold; font-size: 11px; border-color: ${this.isTracingPracticeMode ? 'var(--border-subtle)' : 'rgba(21, 128, 61, 0.4)'}; background: ${this.isTracingPracticeMode ? 'var(--surface-panel-alt)' : 'rgba(21, 128, 61, 0.1)'};">
+          ${this.isTracingPracticeMode ? 'Mode Latihan' : 'Lab Formatif'}
+        </span>
       </div>
       <button id="btn-toggle-hero-card" type="button" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 4px 10px; min-height: 32px; display: inline-flex; align-items: center; gap: 6px;" title="${this.isTracingHeroCollapsed ? 'Buka detail setup studi kasus' : 'Ciutkan kartu setup untuk fokus ke Meja Kerja'}">
         ${this.isTracingHeroCollapsed ? renderPixelIcon('arrow-down', 10, 'currentColor') + ' Buka Setup' : renderPixelIcon('arrow-up', 10, 'currentColor') + ' Ciutkan Setup'}
@@ -4504,6 +4585,73 @@ export class UIManager {
   private async finishTraceRun(): Promise<void> {
     if (!this.currentTraceResult) return;
     const branch = this.currentTraceResult.executedBranch;
+    const isMatch = this.userPrediction === branch;
+
+    // Pembaruan kartu evaluasi metakognisi terlebih dahulu (selalu, match maupun tidak)
+    this.updatePredictionEvaluationCard(this.overlayContainer);
+
+    // Jika dugaan murid TIDAK sesuai, simpan explored (akses) tapi jangan catat nilai (stars)
+    if (!isMatch) {
+      soundFx.playLogicFalse();
+      // Simpan sebagai exploredBranches agar murid tetap bisa lanjut setelah semua kasus dijelajahi
+      const rawProgExplore = await StorageService.getModuleProgress(this.activeModule.id);
+      const oldExplored = rawProgExplore?.exploredBranches || [];
+      const newExplored = Array.from(new Set([...oldExplored, branch]));
+      const updatedProg = await StorageService.saveModuleCoverage(
+        this.activeModule.id,
+        rawProgExplore?.testedBranches || [],
+        0,
+        newExplored
+      );
+      this.allModuleProgress[this.activeModule.id] = updatedProg;
+      this.progressionState = await StorageService.getProgressionState();
+
+      // Perbarui tombol Arena Tantangan jika semua kasus sudah dijelajahi
+      const nextStepCardExplore = this.overlayContainer.querySelector<HTMLElement>('.tracing-next-step-card');
+      if (nextStepCardExplore) {
+        const isTracingDone = !!this.progressionState?.stepTracingCompleted && this.isTracingCycleCompleted();
+        const btnBattleExplore = nextStepCardExplore.querySelector<HTMLButtonElement>('#btn-tracing-to-battle');
+        const eyebrowExplore = nextStepCardExplore.querySelector<HTMLElement>('.eyebrow-label');
+        const infoTextExplore = nextStepCardExplore.querySelector<HTMLElement>('div[style*="font-size: 12.5px"]');
+        if (eyebrowExplore) {
+          eyebrowExplore.style.color = isTracingDone ? 'var(--success)' : 'var(--warning)';
+          eyebrowExplore.innerHTML = `${renderPixelIcon(isTracingDone ? 'check' : 'lock', 12, isTracingDone ? 'var(--success)' : 'var(--warning)')} ${isTracingDone ? 'Semua Kasus Sudah Dijelajahi' : 'Pembuktian Sedang Berjalan'}`;
+        }
+        if (infoTextExplore) {
+          infoTextExplore.textContent = isTracingDone
+            ? 'Seluruh kasus telah dijelajahi. Arena Tantangan Bug Monster kini dapat diakses!'
+            : 'Selesaikan penelusuran di semua kasus siklus ini untuk membuka Arena Tantangan.';
+        }
+        if (btnBattleExplore && isTracingDone) {
+          btnBattleExplore.removeAttribute('disabled');
+          btnBattleExplore.className = 'game-btn game-btn-gold tracing-next-step-btn';
+          btnBattleExplore.innerHTML = `
+            ${renderPixelIcon('swords', 13, '#ffffff')}
+            <span>Lanjut ke Arena Tantangan Monster</span>
+            ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+          `;
+        }
+      }
+
+      this.showRetroToast(
+        `Dugaan belum tepat, tetapi penelusuran ini tetap tercatat. Cermati kembali kondisi pada kode, lalu coba lagi!`,
+        false
+      );
+      return;
+    }
+
+    // Dugaan tepat: catat cabang yang berhasil dibuktikan
+    soundFx.playStepTick();
+
+    // Mode Latihan: nilai resmi sudah dikunci, jangan tulis ke storage
+    if (this.isTracingPracticeMode) {
+      this.showRetroToast(
+        'Dugaan tepat! Namun sesi ini adalah Mode Latihan -- nilai formatif resmi kalian tidak berubah.',
+        true
+      );
+      return;
+    }
+
     const rawOldProg = await StorageService.getModuleProgress(this.activeModule.id);
     const oldProg: ModuleProgress = rawOldProg || {
       testedBranches: [],
@@ -4533,11 +4681,17 @@ export class UIManager {
     this.progressionState = await StorageService.getProgressionState();
     this.allModuleProgress[this.activeModule.id] = newProg;
     this.formativeScores = await StorageService.getFormativeScores();
+
+    // Kunci nilai telusur resmi pada saat siklus pertama kali tuntas (semua kasus explored/tested)
+    if (!this.formativeScores.isTracingLocked && this.isTracingCycleCompleted()) {
+      this.formativeScores = await StorageService.recordFirstAttemptTracing(this.formativeScores.tracingScore);
+      this.isTracingPracticeMode = true; // Sesi berikutnya masuk sebagai latihan
+    }
+
     this.coverageView.update(newProg, this.activeModule.id, this.formativeScores.tracingScore, this.isCycle2Unlocked);
     this.renderGlobalHeader();
 
     // Pembaruan reaktif elemen DOM lokal tanpa render() penuh agar scroll murid tidak tereset
-    this.updatePredictionEvaluationCard(this.overlayContainer);
     const nextStepCard = this.overlayContainer.querySelector<HTMLElement>('.tracing-next-step-card');
     if (nextStepCard) {
       const isTracingDone = !!this.progressionState?.stepTracingCompleted;
@@ -4565,29 +4719,78 @@ export class UIManager {
       }
     }
 
+    // Deteksi kasus berikutnya yang belum selesai di siklus aktif
+    const nextCase = this.getNextUncompletedCase();
+
     if (stars === 2 && oldProg.stars < 2) {
       soundFx.playVictoryFanfare();
+      const buttons: Array<{ label: string; isPrimary?: boolean; action: () => void }> = [];
+
+      if (nextCase) {
+        buttons.push({
+          label: `Lanjut ke ${nextCase.id.toUpperCase()}: ${nextCase.title}`,
+          isPrimary: true,
+          action: () => {
+            this.activeModule = nextCase;
+            this.resetTracingToInitialState();
+            this.render();
+            this.scrollToTop();
+          }
+        });
+        buttons.push({
+          label: 'Lanjut ke Arena Tantangan',
+          isPrimary: false,
+          action: () => this.setScreen('BATTLE')
+        });
+      } else {
+        buttons.push({
+          label: 'Lanjut ke Arena Tantangan',
+          isPrimary: true,
+          action: () => this.setScreen('BATTLE')
+        });
+      }
+      buttons.push({
+        label: 'Tetap di Sini / Uji Nilai Lain',
+        isPrimary: false,
+        action: () => { }
+      });
+
       this.showCelebrationModal(
         'Semua Jalur Kondisi Berhasil Diuji!',
-        `Luar biasa! Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada studi kasus ${this.activeModule.title}. Tim kalian berhasil meraih 2 Bintang sempurna!`,
-        [
-          {
-            label: 'Lanjut ke Arena Tantangan',
-            isPrimary: true,
-            action: () => this.setScreen('BATTLE')
-          },
-          {
-            label: 'Tetap di Sini / Uji Nilai Lain',
-            isPrimary: false,
-            action: () => { }
-          }
-        ]
+        nextCase
+          ? `Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada ${this.activeModule.title}. Tim kalian meraih 2 Bintang! Lanjutkan ke kasus berikutnya: ${nextCase.title}.`
+          : `Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada ${this.activeModule.title}. Tim kalian berhasil meraih 2 Bintang sempurna!`,
+        buttons
       );
     } else if (stars >= 1 && oldProg.stars < 1) {
-      this.showRetroToast('Pengujian cabang berhasil dicatat! Bintang 1 berhasil diraih. Arena Tantangan kini telah terbuka.', true);
+      const toastMsg = nextCase
+        ? `Pengujian cabang berhasil dicatat! Bintang 1 diraih. Uji cabang lainnya untuk meraih Bintang 2, atau lanjut ke kasus berikutnya (${nextCase.id.toUpperCase()}).`
+        : 'Pengujian cabang berhasil dicatat! Bintang 1 berhasil diraih. Arena Tantangan kini telah terbuka.';
+      this.showRetroToast(toastMsg, true);
     } else if (stars > oldProg.stars) {
       this.showRetroToast('Capaian bintang bertambah! Nilai pemahaman formatif kalian meningkat.', true);
     }
+  }
+
+
+  /**
+   * Mengembalikan kasus (modul) berikutnya yang belum selesai (kurang dari 1 cabang teruji)
+   * dalam siklus aktif, atau null jika semua sudah tuntas.
+   */
+  private getNextUncompletedCase(): CaseModule | null {
+    const currentIndex = CASE_MODULES.findIndex(m => m.id === this.activeModule.id);
+    const cycleCap = this.isCycle2Unlocked ? 2 : 1;
+
+    for (let i = 0; i < CASE_MODULES.length; i++) {
+      const idx = (currentIndex + 1 + i) % CASE_MODULES.length;
+      const mod = CASE_MODULES[idx]!;
+      if (mod.cycleRequired > cycleCap) continue;
+      if (mod.id === this.activeModule.id) continue;
+      const prog = this.allModuleProgress[mod.id];
+      const branchCount = prog?.testedBranches?.length || 0;
+      if (branchCount < 1) return mod;
+    }
+    return null;
   }
 
   // =================================================================
@@ -5316,57 +5519,64 @@ export class UIManager {
       this.render();
     });
 
-    questionCard.querySelector('#btn-next-question')?.addEventListener('click', async () => {
-      if (this.currentQuestionIndex + 1 >= questions.length) {
-        // Sesi evaluasi selesai, lepaskan lock sesi aktif
-        this.isEvaluasiSessionActive = false;
+    const btnNextQ = questionCard.querySelector<HTMLButtonElement>('#btn-next-question');
+    btnNextQ?.addEventListener('click', async () => {
+      if (btnNextQ.disabled) return;
+      btnNextQ.disabled = true;
+      try {
+        if (this.currentQuestionIndex + 1 >= questions.length) {
+          // Sesi evaluasi selesai, lepaskan lock sesi aktif
+          this.isEvaluasiSessionActive = false;
 
-        // Catat hasil evaluasi resmi (First-Attempt Lock)
-        const updatedScores = await StorageService.recordFirstAttemptEvaluasi(
-          this.evaluasiCorrectCount,
-          questions.length,
-          this.evaluasiAnswers
-        );
-        this.formativeScores = updatedScores;
+          // Catat hasil evaluasi resmi (First-Attempt Lock)
+          const updatedScores = await StorageService.recordFirstAttemptEvaluasi(
+            this.evaluasiCorrectCount,
+            questions.length,
+            this.evaluasiAnswers
+          );
+          this.formativeScores = updatedScores;
 
-        await StorageService.saveProgressionState({ stepEvaluationCompleted: true });
-        this.progressionState = await StorageService.getProgressionState();
-        this.renderGlobalHeader();
-        soundFx.playVictoryFanfare();
+          await StorageService.saveProgressionState({ stepEvaluationCompleted: true });
+          this.progressionState = await StorageService.getProgressionState();
+          this.renderGlobalHeader();
+          soundFx.playVictoryFanfare();
 
-        const currentScore = this.evaluasiCorrectCount * 20;
-        const isFirst = updatedScores.evaluasiAttemptCount === 1;
+          const currentScore = this.evaluasiCorrectCount * 20;
+          const isFirst = updatedScores.evaluasiAttemptCount === 1;
 
-        const modalTitle = isFirst ? 'Evaluasi Formatif Selesai!' : 'Latihan Evaluasi Selesai!';
-        const modalMessage = isFirst
-          ? `Luar biasa! ${this.session?.pairId || 'Tim belajar kalian'} telah menyelesaikan 5 butir soal evaluasi pemahaman dengan skor ${currentScore} / 100. Nilai resmi formatif ini telah terkunci. Dasbor Capaian Belajar kini telah terbuka penuh!`
-          : `Latihan selesai! Skor perolehan pengerjaan kali ini adalah ${currentScore} / 100. Catatan: Nilai formatif resmi tim kalian (${updatedScores.evaluasiScore} / 100) dari percobaan pertama tetap tersimpan aman.`;
+          const modalTitle = isFirst ? 'Evaluasi Formatif Selesai!' : 'Latihan Evaluasi Selesai!';
+          const modalMessage = isFirst
+            ? `Luar biasa! ${this.session?.pairId || 'Tim belajar kalian'} telah menyelesaikan 5 butir soal evaluasi pemahaman dengan skor ${currentScore} / 100. Nilai resmi formatif ini telah terkunci. Dasbor Capaian Belajar kini telah terbuka penuh!`
+            : `Latihan selesai! Skor perolehan pengerjaan kali ini adalah ${currentScore} / 100. Catatan: Nilai formatif resmi tim kalian (${updatedScores.evaluasiScore} / 100) dari percobaan pertama tetap tersimpan aman.`;
 
-        this.showCelebrationModal(
-          modalTitle,
-          modalMessage,
-          [
-            {
-              label: 'Buka Dasbor Capaian & Rekap Nilai',
-              isPrimary: true,
-              action: () => this.setScreen('PROGRES')
-            },
-            {
-              label: 'Kembali ke Peta Kota',
-              isPrimary: false,
-              action: () => this.setScreen('OVERWORLD')
-            }
-          ]
-        );
-        return;
+          this.showCelebrationModal(
+            modalTitle,
+            modalMessage,
+            [
+              {
+                label: 'Buka Dasbor Capaian & Rekap Nilai',
+                isPrimary: true,
+                action: () => this.setScreen('PROGRES')
+              },
+              {
+                label: 'Kembali ke Peta Kota',
+                isPrimary: false,
+                action: () => this.setScreen('OVERWORLD')
+              }
+            ]
+          );
+          return;
+        }
+
+        this.currentQuestionIndex++;
+        this.selectedAnswer = null;
+        this.answerSubmitted = false;
+        soundFx.playButtonBlip();
+        this.render();
+        this.scrollToTop();
+      } finally {
+        btnNextQ.disabled = false;
       }
-
-      this.currentQuestionIndex++;
-      this.selectedAnswer = null;
-      this.answerSubmitted = false;
-      soundFx.playButtonBlip();
-      this.render();
-      this.scrollToTop();
     });
 
     container.appendChild(questionCard);
@@ -5387,6 +5597,7 @@ export class UIManager {
       evaluasiScore: 0,
       finalScore: 0,
       evaluasiAttemptCount: 0,
+      isTracingLocked: false,
       isEvaluasiLocked: false,
       isBattleLocked: false,
       updatedAt: Date.now()
@@ -5423,9 +5634,9 @@ export class UIManager {
             ${(this.session?.teamSymbol || 'TIM').toUpperCase()}
           </span>
         </div>
-        <div style="flex: 1; min-width: 0; width: 100%;">
+        <div style="flex: 1; min-width: min(100%, 220px);">
           <div style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
-            ${this.session ? `${this.session.pairId} (${this.session.student1Name} &amp; ${this.session.student2Name})` : 'Tim Belajar Murid'}
+            ${this.session ? `${escapeHtml(this.session.pairId)} (${escapeHtml(this.session.student1Name)} &amp; ${escapeHtml(this.session.student2Name)})` : 'Tim Belajar Murid'}
           </div>
           <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <span>Status: <strong style="color: ${formative.finalScore >= 75 ? 'var(--success)' : 'var(--warning-dark)'};">${formative.finalScore >= 75 ? 'Tuntas Memenuhi KKM' : 'Sedang Berproses'}</strong></span>
@@ -5999,8 +6210,8 @@ export class UIManager {
             Tautan Google Drive Pengumpulan Tugas:
           </label>
           <div style="display: flex; gap: 8px;">
-            <input id="input-drive-url" type="text" class="pixel-input" value="${currentDriveUrl}" style="flex: 1; min-height: 42px; font-size: 12px;" />
-            <a id="btn-test-drive" href="${currentDriveUrl}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; text-decoration: none; display: flex; align-items: center;" title="Uji tautan di tab baru">
+            <input id="input-drive-url" type="text" class="pixel-input" value="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" style="flex: 1; min-height: 42px; font-size: 12px;" />
+            <a id="btn-test-drive" href="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; text-decoration: none; display: flex; align-items: center;" title="Uji tautan di tab baru">
               ${renderPixelIcon('drive', 13, 'currentColor')} Tes Tautan
             </a>
           </div>
@@ -6023,20 +6234,26 @@ export class UIManager {
     const controls = content.querySelector<HTMLElement>('#teacher-controls');
 
     const handleVerify = async () => {
-      const pin = pinInput?.value.trim() || '';
-      const isValid = await CycleGuard.verifyTeacherPin(pin);
-      if (isValid) {
-        if (pinErr) pinErr.style.display = 'none';
-        if (pinSection) pinSection.style.display = 'none';
-        if (controls) controls.style.display = 'flex';
-        soundFx.playLogicTrue();
-      } else {
-        if (pinErr) {
-          pinErr.style.display = 'flex';
-          pinErr.classList.add('shake');
-          setTimeout(() => pinErr.classList.remove('shake'), 400);
+      if (btnVerify && btnVerify.disabled) return;
+      if (btnVerify) btnVerify.disabled = true;
+      try {
+        const pin = pinInput?.value.trim() || '';
+        const isValid = await CycleGuard.verifyTeacherPin(pin);
+        if (isValid) {
+          if (pinErr) pinErr.style.display = 'none';
+          if (pinSection) pinSection.style.display = 'none';
+          if (controls) controls.style.display = 'flex';
+          soundFx.playLogicTrue();
+        } else {
+          if (pinErr) {
+            pinErr.style.display = 'flex';
+            pinErr.classList.add('shake');
+            setTimeout(() => pinErr.classList.remove('shake'), 400);
+          }
+          soundFx.playLogicFalse();
         }
-        soundFx.playLogicFalse();
+      } finally {
+        if (btnVerify) btnVerify.disabled = false;
       }
     };
 
@@ -6166,7 +6383,8 @@ export class UIManager {
     // Simpan Pengaturan Guru
     const btnSave = content.querySelector<HTMLButtonElement>('#btn-save-teacher');
     btnSave?.addEventListener('click', async () => {
-      const driveUrl = driveInput?.value.trim() || currentDriveUrl;
+      const rawDrive = driveInput?.value.trim() || currentDriveUrl;
+      const driveUrl = sanitizeWebUrl(rawDrive);
       const isNewlyUnlocked = cycle2Selected && !this.isCycle2Unlocked;
 
       await StorageService.setCycleState(cycle2Selected ? 2 : 1);
@@ -6318,45 +6536,51 @@ export class UIManager {
     const btnSubmit = content.querySelector<HTMLButtonElement>('#btn-submit-token');
 
     const handleSubmit = async () => {
-      const val = tokenInput?.value || '';
-      const isValid = await CycleGuard.verifyStudentToken(val);
-      if (isValid) {
-        this.isCycle2Unlocked = true;
-        this.formativeScores = await StorageService.getFormativeScores();
-        backdrop.remove();
+      if (btnSubmit && btnSubmit.disabled) return;
+      if (btnSubmit) btnSubmit.disabled = true;
+      try {
+        const val = tokenInput?.value || '';
+        const isValid = await CycleGuard.verifyStudentToken(val);
+        if (isValid) {
+          this.isCycle2Unlocked = true;
+          this.formativeScores = await StorageService.getFormativeScores();
+          backdrop.remove();
 
-        if (targetModuleId) {
-          const target = CASE_MODULES.find((m) => m.id === targetModuleId);
-          if (target) {
-            this.activeModule = target;
-            this.currentInputValue = target.defaultInput;
-            this.userPrediction = null;
-            this.currentStepIndex = 0;
-            this.syntaxRenderer.setLines(target.lines, this.currentInputValue);
-            const rawProg = await StorageService.getModuleProgress(target.id);
-            const prog: ModuleProgress = rawProg || {
-              testedBranches: [],
-              stars: 0,
-              isCompleted: false,
-              xpEarned: 0,
-              updatedAt: Date.now()
-            };
-            this.coverageView.update(prog, target.id, this.formativeScores?.tracingScore || 0, this.isCycle2Unlocked);
-            this.recalculateTrace();
-            this.flowgorithmView.setModule(target.id, this.currentInputValue);
+          if (targetModuleId) {
+            const target = CASE_MODULES.find((m) => m.id === targetModuleId);
+            if (target) {
+              this.activeModule = target;
+              this.currentInputValue = target.defaultInput;
+              this.userPrediction = null;
+              this.currentStepIndex = 0;
+              this.syntaxRenderer.setLines(target.lines, this.currentInputValue);
+              const rawProg = await StorageService.getModuleProgress(target.id);
+              const prog: ModuleProgress = rawProg || {
+                testedBranches: [],
+                stars: 0,
+                isCompleted: false,
+                xpEarned: 0,
+                updatedAt: Date.now()
+              };
+              this.coverageView.update(prog, target.id, this.formativeScores?.tracingScore || 0, this.isCycle2Unlocked);
+              this.recalculateTrace();
+              this.flowgorithmView.setModule(target.id, this.currentInputValue);
+            }
           }
-        }
 
-        this.renderGlobalHeader();
-        this.render();
-        this.showCelebrationUnlockModal(true);
-      } else {
-        if (tokenErr) {
-          tokenErr.style.display = 'flex';
-          tokenErr.classList.add('shake');
-          setTimeout(() => tokenErr.classList.remove('shake'), 400);
+          this.renderGlobalHeader();
+          this.render();
+          this.showCelebrationUnlockModal(true);
+        } else {
+          if (tokenErr) {
+            tokenErr.style.display = 'flex';
+            tokenErr.classList.add('shake');
+            setTimeout(() => tokenErr.classList.remove('shake'), 400);
+          }
+          soundFx.playLogicFalse();
         }
-        soundFx.playLogicFalse();
+      } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
       }
     };
 

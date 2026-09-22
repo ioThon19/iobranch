@@ -46,6 +46,8 @@ async function safeDel(key: string): Promise<void> {
 export class StorageService {
   private static progressionMemoryCache: ProgressionState | null = null;
   private static progressionWritePromise: Promise<ProgressionState> | null = null;
+  private static formativeMemoryCache: FormativeScores | null = null;
+  private static formativeWritePromise: Promise<FormativeScores> | null = null;
 
   /**
    * Menyimpan sesi pasangan murid
@@ -66,8 +68,10 @@ export class StorageService {
    */
   public static async clearSession(): Promise<void> {
     this.progressionMemoryCache = null;
+    this.formativeMemoryCache = null;
     await safeDel(STORAGE_KEYS.SESSION);
     await safeDel(STORAGE_KEYS.PROGRESSION);
+    await safeDel(STORAGE_KEYS.FORMATIVE_SCORES);
   }
 
   /**
@@ -135,7 +139,8 @@ export class StorageService {
   public static async saveModuleCoverage(
     moduleId: string,
     branches: string[],
-    _reward = 0
+    _reward = 0,
+    exploredBranches?: string[]
   ): Promise<ModuleProgress> {
     const progressMap = (await safeGet<Record<string, ModuleProgress>>(STORAGE_KEYS.PROGRESS, {})) || {};
     const prevProgress = progressMap[moduleId];
@@ -144,8 +149,15 @@ export class StorageService {
     const stars = mergedBranches.length >= 2 ? 2 : (mergedBranches.length >= 1 ? 1 : 0);
     const isCompleted = mergedBranches.length >= 1;
 
+    // Gabungkan exploredBranches (terpisah dari testedBranches, tidak memberi nilai)
+    const prevExplored = prevProgress?.exploredBranches || [];
+    const mergedExplored = exploredBranches
+      ? Array.from(new Set([...prevExplored, ...exploredBranches]))
+      : prevExplored;
+
     const updatedModule: ModuleProgress = {
       testedBranches: mergedBranches,
+      exploredBranches: mergedExplored,
       stars,
       isCompleted,
       xpEarned: 0,
@@ -155,13 +167,14 @@ export class StorageService {
     progressMap[moduleId] = updatedModule;
     await safeSet(STORAGE_KEYS.PROGRESS, progressMap);
 
-    // Tandai langkah tracing selesai jika sudah menguji cabang
-    if (mergedBranches.length >= 1) {
+    // Tandai langkah tracing selesai jika sudah menguji cabang (benar ATAU sekedar dijelajahi)
+    if (mergedBranches.length >= 1 || mergedExplored.length >= 1) {
       await this.saveProgressionState({ stepTracingCompleted: true });
     }
 
     return updatedModule;
   }
+
 
   /**
    * Mengambil data progres untuk modul tertentu
@@ -236,7 +249,7 @@ export class StorageService {
   public static async getFormativeScores(): Promise<FormativeScores> {
     const allProgress = await this.getAllProgress();
     const progState = await this.getProgressionState();
-    const saved = await safeGet<FormativeScores>(STORAGE_KEYS.FORMATIVE_SCORES);
+    const saved = this.formativeMemoryCache ?? (await safeGet<FormativeScores>(STORAGE_KEYS.FORMATIVE_SCORES));
 
     const cycle = await this.getCycleState();
     const isCycle2 = cycle === 2;
@@ -273,21 +286,27 @@ export class StorageService {
     const evaluasiAttemptCount = saved?.evaluasiAttemptCount ?? (progState.stepEvaluationCompleted ? 1 : 0);
     const isEvaluasiLocked = saved?.isEvaluasiLocked ?? progState.stepEvaluationCompleted;
 
+    // Kunci nilai telusur resmi: jika sudah dikunci, gunakan skor tersimpan
+    const isTracingLocked = saved?.isTracingLocked ?? false;
+    const lockedTracingScore = isTracingLocked ? (saved?.tracingScore ?? tracingScore) : tracingScore;
+
     // Nilai Formatif Akhir: Rata-rata 3 pilar (skala 1–100)
-    const finalScore = Math.round((tracingScore + battleScore + evaluasiScore) / 3);
+    const finalScore = Math.round((lockedTracingScore + battleScore + evaluasiScore) / 3);
 
     const scores: FormativeScores = {
-      tracingScore,
+      tracingScore: lockedTracingScore,
       battleScore,
       evaluasiScore,
       finalScore,
       evaluasiAttemptCount,
+      isTracingLocked,
       isEvaluasiLocked,
       isBattleLocked: isBattleDone,
       evaluasiAnswers: saved?.evaluasiAnswers,
       updatedAt: saved?.updatedAt ?? Date.now()
     };
 
+    this.formativeMemoryCache = scores;
     return scores;
   }
 
@@ -309,25 +328,59 @@ export class StorageService {
   }
 
   /**
+   * Mencatat nilai telusur pada percobaan pertama (First-Attempt Lock)
+   * Dipanggil saat murid pertama kali menyelesaikan semua kasus siklus aktif.
+   */
+  public static async recordFirstAttemptTracing(score: number): Promise<FormativeScores> {
+    const execute = async (): Promise<FormativeScores> => {
+      const current = await this.getFormativeScores();
+      if (current.isTracingLocked) {
+        return current;
+      }
+      const updated: FormativeScores = {
+        ...current,
+        tracingScore: score,
+        isTracingLocked: true,
+        finalScore: Math.round((score + current.battleScore + current.evaluasiScore) / 3),
+        updatedAt: Date.now()
+      };
+      this.formativeMemoryCache = updated;
+      await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+      return updated;
+    };
+    const nextPromise = (this.formativeWritePromise ?? Promise.resolve(null as unknown as FormativeScores))
+      .then(() => execute(), () => execute());
+    this.formativeWritePromise = nextPromise;
+    return await nextPromise;
+  }
+
+  /**
    * Mencatat nilai tantangan pada percobaan pertama (First-Attempt Lock)
    */
   public static async recordFirstAttemptBattle(score = 100): Promise<FormativeScores> {
-    const current = await this.getFormativeScores();
-    if (current.isBattleLocked) {
-      // Nilai resmi telah terkunci, abaikan penimpaan nilai
-      return current;
-    }
+    const execute = async (): Promise<FormativeScores> => {
+      const current = await this.getFormativeScores();
+      if (current.isBattleLocked) {
+        return current;
+      }
 
-    const updated: FormativeScores = {
-      ...current,
-      battleScore: score,
-      isBattleLocked: true,
-      finalScore: Math.round((current.tracingScore + score + current.evaluasiScore) / 3),
-      updatedAt: Date.now()
+      const updated: FormativeScores = {
+        ...current,
+        battleScore: score,
+        isBattleLocked: true,
+        finalScore: Math.round((current.tracingScore + score + current.evaluasiScore) / 3),
+        updatedAt: Date.now()
+      };
+
+      this.formativeMemoryCache = updated;
+      await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+      return updated;
     };
 
-    await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
-    return updated;
+    const nextPromise = (this.formativeWritePromise ?? Promise.resolve(null as unknown as FormativeScores))
+      .then(() => execute(), () => execute());
+    this.formativeWritePromise = nextPromise;
+    return await nextPromise;
   }
 
   /**
@@ -338,33 +391,40 @@ export class StorageService {
     totalQuestions = 5,
     answers: number[] = []
   ): Promise<FormativeScores> {
-    const current = await this.getFormativeScores();
+    const execute = async (): Promise<FormativeScores> => {
+      const current = await this.getFormativeScores();
 
-    if (current.isEvaluasiLocked) {
-      // Sesi latihan berikutnya: pertahankan nilai formatif resmi, catat jumlah percobaan
+      if (current.isEvaluasiLocked) {
+        const updated: FormativeScores = {
+          ...current,
+          evaluasiAttemptCount: current.evaluasiAttemptCount + 1,
+          updatedAt: Date.now()
+        };
+        this.formativeMemoryCache = updated;
+        await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+        return updated;
+      }
+
+      const officialScore = Math.min(100, Math.round((correctAnswersCount / totalQuestions) * 100));
       const updated: FormativeScores = {
         ...current,
-        evaluasiAttemptCount: current.evaluasiAttemptCount + 1,
+        evaluasiScore: officialScore,
+        evaluasiAttemptCount: 1,
+        isEvaluasiLocked: true,
+        evaluasiAnswers: answers,
+        finalScore: Math.round((current.tracingScore + current.battleScore + officialScore) / 3),
         updatedAt: Date.now()
       };
+
+      this.formativeMemoryCache = updated;
       await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
       return updated;
-    }
-
-    // Pengerjaan pertama kali: hitung dan kunci nilai resmi (20 poin/soal)
-    const officialScore = Math.min(100, Math.round((correctAnswersCount / totalQuestions) * 100));
-    const updated: FormativeScores = {
-      ...current,
-      evaluasiScore: officialScore,
-      evaluasiAttemptCount: 1,
-      isEvaluasiLocked: true,
-      evaluasiAnswers: answers,
-      finalScore: Math.round((current.tracingScore + current.battleScore + officialScore) / 3),
-      updatedAt: Date.now()
     };
 
-    await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
-    return updated;
+    const nextPromise = (this.formativeWritePromise ?? Promise.resolve(null as unknown as FormativeScores))
+      .then(() => execute(), () => execute());
+    this.formativeWritePromise = nextPromise;
+    return await nextPromise;
   }
 
   /**

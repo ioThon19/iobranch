@@ -2,13 +2,13 @@
 import { EventCenter } from '../game/EventCenter';
 import { StorageService } from '../services/StorageService';
 
-export const TEACHER_SECRET_PIN = 'PTK';
+export const TEACHER_SECRET_PINS = ['PTK', 'PTK10'];
 
 export class CycleGuard {
   /**
    * Token kelas yang diizinkan untuk murid membuka Siklus 2 secara mandiri
    */
-  public static readonly VALID_STUDENT_TOKENS = ['S1KLUS2'];
+  public static readonly VALID_STUDENT_TOKENS = ['SIKLUS2', 'S1KLUS2'];
 
   /**
    * Memverifikasi token kelas yang diinput murid untuk membuka Siklus 2
@@ -29,7 +29,7 @@ export class CycleGuard {
   public static async verifyTeacherPin(pinInput: string): Promise<boolean> {
     if (!pinInput) return false;
     const clean = pinInput.trim().toUpperCase().replace(/[\s\-_]/g, '');
-    const isValid = clean === TEACHER_SECRET_PIN.toUpperCase();
+    const isValid = TEACHER_SECRET_PINS.includes(clean);
     if (isValid) {
       EventCenter.emit('TEACHER_PANEL_OPENED');
     }
