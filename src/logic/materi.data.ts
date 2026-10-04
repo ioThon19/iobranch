@@ -88,7 +88,7 @@ export const MATERI_BANK: MateriTopic[] = [
       },
       {
         heading: 'Notasi Naratif (Bahasa Alami Manusia)',
-        content: 'Notasi naratif menyajikan langkah algoritma memakai bahasa sehari-hari yang terstruktur. Pendekatan ini sangat cocok saat kalian sedang berdiskusi ide awal bersama teman kelompok sebelum mulai mengetik kode pemrograman.',
+        content: 'Notasi naratif menyajikan langkah algoritma memakai bahasa sehari-hari yang terstruktur. Pendekatan ini sangat cocok saat kamu sedang merancang ide awal algoritma sebelum mulai mengetik kode pemrograman.',
         codeSnippet: {
           language: 'Contoh Naratif: Gerbang Otomatis Stasiun',
           code: `Langkah 1: Penumpang menempelkan kartu e-money pada sensor gerbang.
@@ -220,11 +220,11 @@ SELESAI JIKA`,
     subtitle: 'Jembatan Pemikiran Logika ke Bahasa Pemrograman Formal',
     badgeLabel: 'PRASYARAT 3',
     summary: 'Pseudokode (kode semu) adalah cara menuliskan logika pemrograman menggunakan kata-kata sederhana yang mirip dengan kode program sungguhan, namun tanpa dibebani kerumitan tanda baca bahasa tertentu.',
-    analogies: 'Pseudokode seperti coret-coretan naskah kasar sebelum naskah pidato diketik rapi. Kalian fokus pada jalan cerita logikanya, bukan pada aturan titik koma kompilator.',
+    analogies: 'Pseudokode seperti coret-coretan naskah kasar sebelum naskah pidato diketik rapi. Kamu fokus pada jalan cerita logikanya, bukan pada aturan titik koma kompilator.',
     sections: [
       {
         heading: 'Mengapa Pseudokode Sangat Membantu Murid SMA?',
-        content: 'Saat baru belajar koding, murid sering pusing memikirkan koma, titik dua, atau kurung kurawal <code>{}</code>. Dengan pseudokode, kalian bisa melatih daya nalar logika terlebih dahulu. Begitu logikanya sudah benar, mengubah ke Bahasa C, Python, atau Javascript akan terasa sangat mudah!'
+        content: 'Saat baru belajar koding, murid sering pusing memikirkan koma, titik dua, atau kurung kurawal <code>{}</code>. Dengan pseudokode, kamu bisa melatih daya nalar logika terlebih dahulu. Begitu logikanya sudah benar, mengubah ke Bahasa C, Python, atau Javascript akan terasa sangat mudah!'
       },
       {
         heading: 'Perbandingan 3 Bentuk Penulisan Algoritma',
@@ -291,7 +291,7 @@ int main() {
     subtitle: 'Kotak Memori Penyimpan Data & Nilai Komputasi',
     badgeLabel: 'PRASYARAT 4',
     summary: 'Variabel adalah wadah penampung di memori komputer yang diberi nama untuk menyimpan data. Data di dalam variabel nilainya dapat berubah-ubah sepanjang program berjalan sesuai dengan tipe data yang ditentukan.',
-    analogies: 'Bayangkan variabel seperti loker di sekolah yang diberi stiker nama. Loker bernama "saldo" khusus diisi lembaran uang (angka bulat), sedangkan loker bernama "nama_tim" khusus diisi kertas bertuliskan huruf.',
+    analogies: 'Bayangkan variabel seperti loker di sekolah yang diberi stiker nama. Loker bernama "saldo" khusus diisi lembaran uang (angka bulat), sedangkan loker bernama "nama_murid" khusus diisi kertas bertuliskan huruf.',
     sections: [
       {
         heading: '4 Tipe Data Dasar yang Paling Sering Digunakan',
@@ -444,7 +444,7 @@ SELESAI JIKA`,
     subtitle: 'Cara Komputer Memilih Jalur Keputusan di Persimpangan',
     badgeLabel: 'MODUL 1',
     summary: 'Struktur percabangan (Branching) membuat program komputer tidak lagi berjalan kaku secara lurus saja, melainkan mampu mengambil keputusan arah instruksi berdasarkan pengujian kondisi yang bernilai benar (TRUE) atau salah (FALSE).',
-    analogies: 'Sama seperti saat berpetualang: di sebuah persimpangan gua, JIKA tim memiliki kunci emas MAKA pintu rahasia terbuka, LAINNYA tim harus mencari jalan memutar.',
+    analogies: 'Sama seperti saat berpetualang: di sebuah persimpangan gua, JIKA kamu memiliki kunci emas MAKA pintu rahasia terbuka, LAINNYA kamu harus mencari jalan memutar.',
     sections: [
       {
         heading: 'Mengapa Percabangan Sangat Penting?',
@@ -478,7 +478,7 @@ SELESAI JIKA`,
       }
     ],
     diagramType: 'flowchart_ifelse',
-    proTips: 'Komputer mengevaluasi kondisi secara pasti: satu cabang dipilih, dan cabang pasangannya otomatis dilewati (tidak dijalankan).',
+    proTips: 'Komputer mengevaluasi kondisi secara pasti: satu cabang dipilih, dan cabang alternatifnya otomatis dilewati (tidak dijalankan).',
     misconceptionWarning: 'Mustahil cabang IF dan cabang ELSE berjalan bersamaan pada satu kali putaran eksekusi program!',
     simulator: {
       type: 'condition_tester',
@@ -687,7 +687,7 @@ SELESAI JIKA`,
     title: 'Analisis Alur & Teknik Telusur Bebas Bug (Siklus 2)',
     subtitle: 'Strategi Menemukan Kesalahan Logika Tanpa Perlu Menebak',
     badgeLabel: 'MODUL 5',
-    summary: 'Dalam petualangan logika pemrograman, kebiasaan buruk yang harus dihindari adalah menebak-nebak hasil akhir program secara spekulatif. Melalui teknik Telusur (penelusuran baris demi baris), kalian dilatih melacak nilai variabel secara ilmiah.',
+    summary: 'Dalam petualangan logika pemrograman, kebiasaan buruk yang harus dihindari adalah menebak-nebak hasil akhir program secara spekulatif. Melalui teknik Telusur (penelusuran baris demi baris), kamu dilatih melacak nilai variabel secara ilmiah.',
     analogies: 'Telusur seperti rekaman VAR (Video Assistant Referee) di pertandingan sepak bola: mengulang kejadian detik demi detik secara lambat untuk memastikan keputusan mana yang benar-benar terjadi.',
     sections: [
       {

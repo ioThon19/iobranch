@@ -243,8 +243,8 @@ Media ini dirancang dengan mengintegrasikan tiga kerangka kerja pedagogis modern
 * **Deskripsi**: Isolasi perlakuan tindakan agar materi Siklus II tidak diakses mendahului jadwal, disertai fleksibilitas demonstrasi kelas.
 * **Mekanisme**:
   * Default sistem: Siklus 1 aktif (Modul 1-3 terbuka, Modul 4-5 terkunci).
-  * **Jalur Mandiri Murid**: Murid memasukkan token pembelajaran yang dibagikan guru (`SIKLUS2`) untuk membuka Modul 4 dan 5 secara permanen di perangkat tim.
-  * **Jalur Fasilitator Guru (Mode Demo)**: Guru dapat mengetuk logo header 3 kali, memasukkan PIN `PTK10`, dan mengaktifkan mode demonstrasi bebas (*Teacher Bypass Mode*) untuk membuka semua landmark tanpa batasan urutan langkah.
+  * **Jalur Mandiri Murid**: Murid memasukkan token pembelajaran yang dibagikan guru (`S1KLUS2`, dengan fallback `SIKLUS2`) untuk membuka Modul 4 dan 5 secara permanen di perangkat tim.
+  * **Jalur Fasilitator Guru (Mode Demo & Panel Kendali)**: Guru dapat mengetuk logo header/footer 3 kali, memasukkan PIN rahasia `PTK` (dengan fallback `PTK10`), dan mengaktifkan panel kendali guru untuk membuka materi Siklus 2, mengonfigurasi URL Google Drive, atau mengaktifkan mode demonstrasi bebas (*Teacher Bypass Mode*) untuk membuka semua landmark tanpa batasan urutan langkah.
 
 ### FR-8: Rekapitulasi Sesi & Jembatan ke LKPD Fisik
 * **Deskripsi**: Fasilitas penyalinan data uji yang telah dibuktikan murid ke lembar kerja fisik kelompok.
@@ -268,7 +268,7 @@ Media ini dirancang dengan mengintegrasikan tiga kerangka kerja pedagogis modern
   * Berkas TXT: Laporan tertulis rapi yang memuat rekapitulasi data uji, capaian lencana, dan refleksi belajar tim untuk lampiran LKPD fisik.
 * **Dua Jalur Pengunggahan**:
   1. *Jalur Utama (Web Share API)*: Membuka jendela bagikan bawaan ponsel untuk menyimpan langsung ke Google Drive kelas dalam 2 ketukan.
-  2. *Jalur Cadangan (Fallback)*: Mengunduh berkas fisik secara lokal ke gawai dan membuka tautan Google Drive guru di tab baru.
+  2. *Jalur Cadangan (Fallback)*: Mengunduh berkas fisik secara lokal ke gawai dan membuka tautan Google Drive guru di tab baru (Target default: `https://drive.google.com/drive/folders/1259eAOfYs9FZdFJxEUieCdBZTLI72rPr?hl=ID` / `https://s.id/progres-siklus1`).
 
 ### FR-11: Sistem Mode Latihan Tiga Pilar (*Practice Mode System*)
 * **Deskripsi**: Setelah murid menyelesaikan sesi resmi pada salah satu dari tiga pilar asesmen (Telusur, Tantangan, Evaluasi), sistem secara otomatis mengaktifkan Mode Latihan saat murid mengakses kembali halaman tersebut.
@@ -281,18 +281,6 @@ Media ini dirancang dengan mengintegrasikan tiga kerangka kerja pedagogis modern
   * **Lab Telusur**: *"Tim kalian telah menyelesaikan misi Lab Telusur ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman penelusuran kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian."*
   * **Tantangan**: *"Kalian telah menyelesaikan misi Tantangan ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman evaluasi kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian."*
   * **Evaluasi**: *"Tim kalian telah menyelesaikan evaluasi resmi Siklus 1 sebelumnya. Kalian dipersilakan mengerjakan ulang untuk memperdalam pemahaman konsep logika percabangan, namun nilai formatif resmi tetap menggunakan hasil pengerjaan pertama."*
-
-### FR-10: Ekspor Asesmen Formatif & Integrasi Cloud Drive (Web Share API)
-* **Deskripsi**: Fasilitas pengambilan data kemajuan belajar formatif kelompok dari IndexedDB untuk dianalisis oleh guru sebagai bukti triangulasi tindakan PTK.
-* **Format Penamaan File Standar**:
-  `iobranch_Siklus[Siklus]_[CleanPairId]_[M1]_[M2].csv` dan `.txt`  
-  (Contoh: `iobranch_Siklus1_Tim_Absen_03-14_Budi3_Siti14.csv`).
-* **Format Rekap**:
-  * Berkas CSV: Timestamp, Siklus, PairId, Nama Murid 1, Absen Murid 1, Nama Murid 2, Absen Murid 2, Lambang Tim, Nilai Telusur Kasus, Skor Tantangan Monster, Nilai Evaluasi Formatif, dan Nilai Formatif Akhir.
-  * Berkas TXT: Laporan tertulis rapi yang memuat rekapitulasi data uji, capaian lencana, dan refleksi belajar tim untuk lampiran LKPD fisik.
-* **Dua Jalur Pengunggahan**:
-  1. *Jalur Utama (Web Share API)*: Membuka jendela bagikan bawaan ponsel untuk menyimpan langsung ke Google Drive kelas dalam 2 ketukan.
-  2. *Jalur Cadangan (Fallback)*: Mengunduh berkas fisik secara lokal ke gawai dan membuka tautan Google Drive guru di tab baru.
 
 ---
 
@@ -392,7 +380,7 @@ Sebelum media digunakan dalam tindakan kelas nyata, aplikasi wajib memenuhi selu
 - [x] **PASS**: First-Attempt Lock aktif pada ketiga pilar (`isTracingLocked`, `isBattleLocked`, `isEvaluasiLocked`).
 - [x] **PASS**: Mode Latihan aktif otomatis (modal + badge) saat murid kembali ke halaman yang sudah selesai.
 - [x] **PASS**: Sistem penilaian formatif berbobot (30/30/40) tercatat akurat dan sinkron dengan dasbor progres.
-- [x] **PASS**: Modul Siklus II terkunci rapat dan dapat dibuka via token murid (`SIKLUS2`) atau PIN guru (`PTK10`).
+- [x] **PASS**: Modul Siklus II terkunci rapat dan dapat dibuka via token murid (`S1KLUS2` / `SIKLUS2`) atau PIN guru (`PTK` / `PTK10`).
 - [x] **PASS**: Aplikasi berfungsi normal 100% dalam Mode Pesawat (*Airplane Mode*) tanpa koneksi internet.
 - [x] **PASS**: Zero Raw Emojis (seluruh ikon menggunakan komponen SVG pixel art tajam).
 - [x] **PASS**: 100% konsisten menggunakan istilah "murid" di seluruh antarmuka dan dokumentasi.

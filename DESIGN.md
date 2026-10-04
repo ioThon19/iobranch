@@ -253,11 +253,11 @@ Mengacu pada aturan mutu proyek, kartu antarmuka menolak garis aksen warna tebal
 * **Tujuan**: Manual interaktif yang menjelaskan simbol-simbol game, fungsi tiap tombol, dan alur pengerjaan LKPD.
 
 ### Layar 10: Pengaturan & Hak Akses Guru (Settings & Teacher PIN)
-* **Tujuan**: Pengaturan preferensi visual, audio, reset tim, dan panel administrasi rahasia guru (PIN `PTK10`).
-* **Fitur**: Buka Kunci Siklus 2 manual, Mode Demo Bebas (*Teacher Bypass*), dan konfigurasi URL Drive kelas.
+* **Tujuan**: Pengaturan preferensi visual, audio, reset tim, dan panel administrasi rahasia fasilitator guru (diakses via 3x klik logo header/footer, PIN `PTK` dengan fallback `PTK10`).
+* **Fitur**: Master switch buka kunci Siklus 2, Mode Demo Bebas (*Teacher Bypass*), inspeksi cache luring, dan konfigurasi fleksibel URL Google Drive kelas (default: `https://drive.google.com/drive/folders/1259eAOfYs9FZdFJxEUieCdBZTLI72rPr?hl=ID` / `https://s.id/progres-siklus1`).
 
 ### Layar 11: Modal Token Murid Siklus 2
-* **Tujuan**: Memfasilitasi pembukaan materi Siklus 2 secara mandiri oleh murid menggunakan token `SIKLUS2` yang dibagikan guru di kelas.
+* **Tujuan**: Memfasilitasi pembukaan materi Siklus 2 secara mandiri oleh murid menggunakan token `S1KLUS2` (atau toleransi `SIKLUS2`) yang diumumkan guru di kelas.
 
 ### Layar 12: Modal Selebrasi Kelulusan / Bintang Penuh
 * **Tujuan**: Dialog perayaan bernada suportif saat murid berhasil menuntaskan seluruh misi atau meraih 2 Bintang sempurna.

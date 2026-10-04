@@ -5,7 +5,7 @@
  * Melakukan escaping karakter HTML untuk mencegah Cross-Site Scripting (XSS)
  * saat merender teks dinamis ke dalam innerHTML.
  */
-export function escapeHtml(str: string): string {
+export function escapeHtml(str?: string | null): string {
   if (!str) return '';
   return String(str)
     .replace(/&/g, '&amp;')

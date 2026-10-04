@@ -46,7 +46,7 @@ export const TEAM_SYMBOLS_DATA: Record<TeamSymbol, TeamSymbolMeta> = {
 };
 
 /**
- * Menghasilkan SVG 16-bit retro pixel art tajam (crisp edges) untuk tiap lambang tim
+ * Menghasilkan SVG 16-bit retro pixel art tajam (crisp edges) untuk lambang avatar murid
  */
 export function renderTeamSymbolPixelArt(symbol: TeamSymbol, size = 32): string {
   switch (symbol) {
