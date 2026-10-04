@@ -260,9 +260,12 @@ Komponen ini merender diagram alir SVG murni berstandar Flowgorithm:
 ---
 
 ### 3.5 Pengunci Siklus & Pengaturan Fleksibel (`CycleGuard.ts`)
-* **Mode Siklus Default**: Siklus 1 aktif saat pendaftaran tim.
-* **Pembukaan Siklus 2 Mandiri (Token Murid)**: Murid dapat memasukkan token `SIKLUS2` yang dibagikan oleh guru di kelas untuk membuka materi Modul 4 dan 5 secara permanen di gawainya.
-* **Mode Demo Guru (Bypass Mode)**: Fasilitator guru dapat memasukkan PIN `PTK10` pada modal rahasia untuk mengaktifkan mode bebas eksplorasi seluruh landmark tanpa batasan urutan langkah, berguna untuk keperluan peragaan di depan kelas.
+* **Mode Siklus Default**: Siklus 1 aktif saat pendaftaran tim (Modul 1-3 terbuka, Modul 4-5 terkunci).
+* **Pembukaan Siklus 2 Mandiri (Token Murid)**: Murid dapat memasukkan token `S1KLUS2` (dengan fallback `SIKLUS2` pada `VALID_STUDENT_TOKENS`) yang diumumkan oleh guru di kelas untuk membuka materi Modul 4 dan 5 secara permanen di gawainya.
+* **Panel Kontrol & Mode Demo Guru (Teacher Mode)**: Fasilitator guru dapat mengakses panel kontrol rahasia dengan mengetuk logo header/footer 3 kali berturut-turut, lalu memasukkan PIN rahasia `PTK` (dengan fallback `PTK10` pada `TEACHER_SECRET_PINS`). Fitur panel mencakup:
+  1. *Master Switch Siklus 2*: Membuka gembok Modul 4 dan 5 seketika.
+  2. *Konfigurasi URL Google Drive*: Mengubah target pengumpulan tugas secara dinamis (default: `https://drive.google.com/drive/folders/1259eAOfYs9FZdFJxEUieCdBZTLI72rPr?hl=ID` / `https://s.id/progres-siklus1`).
+  3. *Mode Demo Guru (Teacher Bypass Mode)*: Membuka seluruh landmark tanpa batasan urutan untuk keperluan demonstrasi peragaan di depan kelas.
 
 ---
 

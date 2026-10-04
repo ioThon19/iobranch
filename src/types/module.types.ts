@@ -32,4 +32,15 @@ export interface CaseModule {
     level2: string;
     level3: string;
   };
+  weightPoints?: number; // Bobot nilai formatif (contoh: 30, 30, 40)
+  testPresets?: CaseTestPreset[];
 }
+
+export interface CaseTestPreset {
+  label: string;
+  value: number;
+  targetBranch: string;
+  badge: string;
+  explanation: string;
+}
+

@@ -1,17 +1,33 @@
-// src/types/session.types.ts - Definisi Tipe Sesi Pasangan dan Progres (SSOT: SDD.md)
+// src/types/session.types.ts - Definisi Tipe Sesi Murid dan Progres (SSOT: SDD.md)
 
 export type TeamSymbol = 'algoritma' | 'biner' | 'matriks' | 'vektor';
 
 export interface StudentSession {
-  pairId: string; // ID Pasangan Tim Belajar (contoh: 'Tim Absen 01-02')
-  student1Name: string;
-  student1Absen: number;
-  student2Name: string;
-  student2Absen: number;
+  // Mode mandiri (Siklus I Pertemuan 2 dan Siklus II)
+  studentName?: string;
+  studentAbsen?: number;
+  studentId?: string;
+
+  // Kompatibilitas mode pasangan (Siklus I Pertemuan 1)
+  pairId?: string;
+  student1Name?: string;
+  student1Absen?: number;
+  student2Name?: string;
+  student2Absen?: number;
+
   teamSymbol: TeamSymbol;
   totalXp: number; // Akumulasi poin pengalaman (default: 0)
   currentLevel: number; // Kalkulasi: Math.floor(totalXp / 100) + 1
   createdAt: number;
+}
+
+export type TracingWizardStep = 1 | 2 | 3 | 4;
+
+export interface MissionGuidanceMeta {
+  step: TracingWizardStep;
+  tag: string;
+  title: string;
+  instruction: string;
 }
 
 export interface ModuleProgress {

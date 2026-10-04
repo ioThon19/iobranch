@@ -2,10 +2,10 @@
 import { CASE_MODULES } from '../logic/modules.data';
 import { MATERI_BANK, getMateriTopicById } from '../logic/materi.data';
 import { CaseModule } from '../types/module.types';
-import { StudentSession, ModuleProgress, TeamSymbol, ProgressionState, FormativeScores } from '../types/session.types';
-import { StorageService } from '../services/StorageService';
+import { StudentSession, ModuleProgress, TeamSymbol, ProgressionState, FormativeScores, TracingWizardStep, MissionGuidanceMeta } from '../types/session.types';
+import { StorageService, DEFAULT_POSTTEST_URL } from '../services/StorageService';
 import { soundFx } from '../services/AudioService';
-import { AssessmentExportService } from '../services/AssessmentExportService';
+import { AssessmentExportService, DirectUploadResult } from '../services/AssessmentExportService';
 import { CycleGuard } from '../logic/CycleGuard';
 import { traceModuleExecution, TraceExecutionResult, validateNumericInput } from '../logic/TracerEngine';
 import { EventCenter } from '../game/EventCenter';
@@ -13,6 +13,7 @@ import { SyntaxRenderer } from './SyntaxRenderer';
 import { CoverageView, MODULE_BRANCHES } from './CoverageView';
 import { FlowgorithmView } from './FlowgorithmView';
 import { renderTeamSymbolPixelArt, TEAM_SYMBOLS_DATA } from './TeamSymbolRenderer';
+import { renderCaseIllustrationPixelArt } from './CaseIllustrationRenderer';
 import { escapeHtml, isValidSafeName, sanitizeWebUrl } from '../utils/security';
 
 export type PixelIconType =
@@ -50,7 +51,8 @@ export type PixelIconType =
   | 'lock'
   | 'unlock'
   | 'terminal'
-  | 'cross';
+  | 'cross'
+  | 'upload';
 
 export function renderPixelIcon(name: PixelIconType, size = 16, color = 'currentColor'): string {
   switch (name) {
@@ -124,6 +126,8 @@ export function renderPixelIcon(name: PixelIconType, size = 16, color = 'current
       return `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; display: inline-block;"><path d="M4 2h6l3 3v9H4V2z"/><path d="M10 2v3h3m-6 3h4m-4 3h4"/></svg>`;
     case 'cross':
       return `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; display: inline-block;"><line x1="3" y1="3" x2="13" y2="13"/><line x1="13" y1="3" x2="3" y2="13"/></svg>`;
+    case 'upload':
+      return `<svg width="${size}" height="${size}" viewBox="0 0 16 16" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; display: inline-block;"><path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2"/><polyline points="5 5 8 2 11 5"/><line x1="8" y1="2" x2="8" y2="10"/></svg>`;
     default:
       return '';
   }
@@ -174,6 +178,7 @@ export class UIManager {
   private autoPlayTimer: number | null = null;
   private isTracingHeroCollapsed: boolean = false;
   private bypassTracingGuardOnce: boolean = false;
+  private tracingWizardStep: TracingWizardStep = 1;
 
   // State Logo Ketuk 3x untuk Guru
   private logoClickCount = 0;
@@ -200,8 +205,24 @@ export class UIManager {
   private isBattlePracticeMode = false;
   private isTracingPracticeMode = false;
 
-  // State Tab Dasbor Progres (Layar 08)
-  private activeProgressTab: 'BADGES' | 'MODULES' | 'EXPORT' = 'BADGES';
+  // State Progressive Disclosure Stack Panduan Belajar (Layar 02)
+  private activeGuideStack: 1 | 2 | 3 = 1;
+  private maxUnlockedGuideStack: 1 | 2 | 3 = 1;
+
+  // State Progressive Disclosure Stack Dialog Orientasi Masalah (Layar 03)
+  private activeDialogStack: 1 | 2 | 3 = 1;
+  private maxUnlockedDialogStack: 1 | 2 | 3 = 1;
+
+  // State Progressive Disclosure Stack Materi Pembelajaran (Layar 04)
+  private materiActiveStackMap: Record<string, 1 | 2 | 3> = {};
+  private materiMaxUnlockedStackMap: Record<string, 1 | 2 | 3> = {};
+
+  // State Progressive Disclosure Stack Dasbor Progres & Portofolio Belajar (Layar 08)
+  private activeProgressStack: 1 | 2 | 3 = 1;
+  private maxUnlockedProgressStack: 1 | 2 | 3 = 1;
+  private progressPortfolioSubTab: 'MODULES' | 'BADGES' = 'MODULES';
+  private lastCloudUploadResult: DirectUploadResult | null = null;
+  private isCloudUploading = false;
 
   constructor(overlayElementId: string) {
     const el = document.getElementById(overlayElementId);
@@ -218,6 +239,7 @@ export class UIManager {
     this.progressionState = await StorageService.getProgressionState();
     this.readMateriIds = await StorageService.getReadMateriIds();
     this.formativeScores = await StorageService.getFormativeScores();
+    await StorageService.getGasApiUrl();
 
     this.syntaxRenderer = new SyntaxRenderer({
       lines: this.activeModule.lines,
@@ -276,7 +298,7 @@ export class UIManager {
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', (e) => {
         if ((this.currentScreen === 'EVALUASI' && this.isEvaluasiSessionActive && this.selectedAnswer !== null) ||
-            (this.currentScreen === 'BATTLE' && this.isBattleSessionActive && this.currentBattleRound > 1)) {
+          (this.currentScreen === 'BATTLE' && this.isBattleSessionActive && this.currentBattleRound > 1)) {
           e.preventDefault();
           e.returnValue = '';
         }
@@ -291,7 +313,9 @@ export class UIManager {
    */
   public isScreenUnlocked(screen: ScreenId): boolean {
     if (this.progressionState?.teacherBypassMode) return true;
-    const hasSession = !!(this.progressionState?.stepRegistrationCompleted || (this.session && this.session.student1Name && this.session.student2Name));
+    const hasIndividualSession = !!(this.session && this.session.studentName && this.session.studentAbsen);
+    const hasPairSession = !!(this.session && this.session.student1Name && this.session.student2Name);
+    const hasSession = !!(this.progressionState?.stepRegistrationCompleted || hasIndividualSession || hasPairSession);
     switch (screen) {
       case 'MENU':
       case 'PANDUAN':
@@ -343,8 +367,8 @@ export class UIManager {
       case 'DIALOG':
         return {
           stepNum: 'Langkah 01',
-          title: 'Daftarkan Tim Terlebih Dahulu',
-          desc: 'Kalian harus mendaftarkan Nomor Absen serta Nama Lengkap kedua murid pada menu Beranda sebelum dapat menjelajah kota dan membaca materi.',
+          title: 'Daftarkan Profil Murid Terlebih Dahulu',
+          desc: 'Kamu harus mendaftarkan Nomor Absen serta Nama Lengkap pada menu Beranda sebelum dapat menjelajah kota dan membaca materi.',
           redirectScreen: 'MENU'
         };
       case 'MATERI':
@@ -352,14 +376,14 @@ export class UIManager {
           return {
             stepNum: 'Langkah 01',
             title: 'Temui Guru Pak Budi Terlebih Dahulu',
-            desc: 'Kalian harus menemui dan berbicara terlebih dahulu dengan Guru Pak Budi di ujung kiri jalan (di antara pohon) untuk orientasi masalah sebelum ruang kelas materi dibuka.',
+            desc: 'Kamu harus menemui dan berbicara terlebih dahulu dengan Guru Pak Budi di ujung kiri jalan (di antara pohon) untuk orientasi masalah sebelum ruang kelas materi dibuka.',
             redirectScreen: 'DIALOG'
           };
         }
         return {
           stepNum: 'Langkah 01',
-          title: 'Daftarkan Tim Terlebih Dahulu',
-          desc: 'Kalian harus mendaftarkan Nomor Absen serta Nama Lengkap kedua murid pada menu Beranda sebelum dapat menjelajah kota dan membaca materi.',
+          title: 'Daftarkan Profil Murid Terlebih Dahulu',
+          desc: 'Kamu harus mendaftarkan Nomor Absen serta Nama Lengkap pada menu Beranda sebelum dapat menjelajah kota dan membaca materi.',
           redirectScreen: 'MENU'
         };
       case 'TRACING':
@@ -387,7 +411,7 @@ export class UIManager {
         return {
           stepNum: 'Langkah 05',
           title: 'Selesaikan Soal Evaluasi Terlebih Dahulu',
-          desc: 'Jawab semua butir soal evaluasi pemahaman di tab EVALUASI untuk membuka rekap nilai, lencana prestasi, dan sertifikat tim.',
+          desc: 'Jawab semua butir soal evaluasi pemahaman di tab EVALUASI untuk membuka rekap nilai, lencana prestasi, dan sertifikat capaian murid.',
           redirectScreen: 'EVALUASI'
         };
       default:
@@ -464,12 +488,12 @@ export class UIManager {
           const requiredCount = this.isCycle2Unlocked ? 5 : 3;
           this.showCelebrationModal(
             'Sesi Lab Telusur Sedang Berjalan',
-            `Kalian belum menuntaskan pengujian cabang kondisi (Target Bintang 2 per kasus) pada ${requiredCount} kasus ${currentCycleText}. Apakah kalian yakin ingin meninggalkan meja kerja telusur?`,
+            `Kamu belum menuntaskan pengujian cabang kondisi (Target Bintang 2 per kasus) pada ${requiredCount} kasus ${currentCycleText}. Apakah kamu yakin ingin meninggalkan meja kerja telusur?`,
             [
               {
                 label: 'Lanjutkan Pengujian Cabang',
                 isPrimary: true,
-                action: () => {}
+                action: () => { }
               },
               {
                 label: 'Keluar dari Meja Kerja',
@@ -490,12 +514,12 @@ export class UIManager {
     if (this.currentScreen === 'BATTLE' && this.isBattleSessionActive && screen !== 'BATTLE') {
       this.showCelebrationModal(
         'Sesi Tantangan Sedang Berlangsung',
-        'Selesaikan seluruh 5 ronde evaluasi kondisi pada pertarungan ini terlebih dahulu agar capaian belajar tercatat dengan akurat. Apakah kalian yakin ingin keluar?',
+        'Selesaikan seluruh 5 ronde evaluasi kondisi pada pertarungan ini terlebih dahulu agar capaian belajar tercatat dengan akurat. Apakah kamu yakin ingin keluar?',
         [
           {
             label: 'Lanjutkan Pertarungan',
             isPrimary: true,
-            action: () => {}
+            action: () => { }
           },
           {
             label: 'Keluar dari Sesi',
@@ -514,12 +538,12 @@ export class UIManager {
     if (this.currentScreen === 'EVALUASI' && this.isEvaluasiSessionActive && screen !== 'EVALUASI') {
       this.showCelebrationModal(
         'Sesi Evaluasi Sedang Berlangsung',
-        'Kalian sedang mengerjakan soal evaluasi pemahaman konsep logika percabangan. Selesaikan seluruh butir soal terlebih dahulu sebelum berpindah ke halaman lain. Apakah kalian yakin ingin keluar?',
+        'Kamu sedang mengerjakan soal evaluasi pemahaman konsep logika percabangan. Selesaikan seluruh butir soal terlebih dahulu sebelum berpindah ke halaman lain. Apakah kamu yakin ingin keluar?',
         [
           {
             label: 'Lanjutkan Pengerjaan Soal',
             isPrimary: true,
-            action: () => {}
+            action: () => { }
           },
           {
             label: 'Keluar dari Sesi',
@@ -554,12 +578,12 @@ export class UIManager {
         window.setTimeout(() => {
           this.showCelebrationModal(
             'Mode Latihan Tantangan',
-            'Kalian telah menyelesaikan misi Tantangan ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman evaluasi kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian.',
+            'Kamu telah menyelesaikan misi Tantangan ini sebelumnya. Kamu dipersilakan berlatih kembali untuk mengasah pemahaman evaluasi kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmimu.',
             [
               {
                 label: 'Mulai Latihan Mandiri',
                 isPrimary: true,
-                action: () => {}
+                action: () => { }
               }
             ]
           );
@@ -582,12 +606,12 @@ export class UIManager {
         window.setTimeout(() => {
           this.showCelebrationModal(
             'Mode Latihan Evaluasi',
-            'Tim kalian telah menyelesaikan evaluasi resmi Siklus 1 sebelumnya. Kalian dipersilakan mengerjakan ulang untuk memperdalam pemahaman konsep logika percabangan, namun nilai formatif resmi tetap menggunakan hasil pengerjaan pertama.',
+            'Kamu telah menyelesaikan evaluasi resmi Siklus 1 sebelumnya. Kamu dipersilakan mengerjakan ulang untuk memperdalam pemahaman konsep logika percabangan, namun nilai formatif resmi tetap menggunakan hasil pengerjaan pertama.',
             [
               {
                 label: 'Mulai Latihan Mandiri',
                 isPrimary: true,
-                action: () => {}
+                action: () => { }
               }
             ]
           );
@@ -617,12 +641,12 @@ export class UIManager {
         window.setTimeout(() => {
           this.showCelebrationModal(
             'Mode Latihan Lab Telusur',
-            'Tim kalian telah menyelesaikan misi Lab Telusur ini sebelumnya. Tim kalian dipersilakan berlatih kembali untuk mengasah pemahaman penelusuran kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmi kalian.',
+            'Kamu telah menyelesaikan misi Lab Telusur ini sebelumnya. Kamu dipersilakan berlatih kembali untuk mengasah pemahaman penelusuran kondisi percabangan, namun sesi latihan ini tidak mengubah nilai formatif resmimu.',
             [
               {
                 label: 'Mulai Latihan Mandiri',
                 isPrimary: true,
-                action: () => {}
+                action: () => { }
               }
             ]
           );
@@ -723,6 +747,11 @@ export class UIManager {
 
     if (screen === 'TRACING') {
       this.resetTracingToInitialState();
+      window.setTimeout(() => {
+        if (this.currentScreen === 'TRACING') {
+          this.showMissionGuidanceToast(1);
+        }
+      }, 180);
     }
 
     this.renderGlobalHeader();
@@ -777,6 +806,7 @@ export class UIManager {
     this.currentStepIndex = 0;
     this.currentInputValue = this.activeModule.defaultInput;
     this.isTracingHeroCollapsed = false;
+    this.tracingWizardStep = 1;
     if (this.autoPlayTimer !== null) {
       window.clearInterval(this.autoPlayTimer);
       this.autoPlayTimer = null;
@@ -907,7 +937,7 @@ export class UIManager {
         ${this.session
         ? `<span class="badge-pill navbar-team-badge" style="font-family: var(--font-code); font-size: 10px; font-weight: 700; color: var(--warning); border-color: rgba(217, 119, 6, 0.4); background: rgba(217, 119, 6, 0.1); display: inline-flex; align-items: center; gap: 5px;">
                 ${renderTeamSymbolPixelArt(this.session.teamSymbol, 15)}
-                <span>[${this.session.pairId}]</span>
+                <span>[${this.session.studentAbsen ? `Absen ${String(this.session.studentAbsen).padStart(2, '0')}` : (this.session.pairId || 'Murid')}]</span>
               </span>`
         : ''
       }
@@ -1144,7 +1174,7 @@ export class UIManager {
           </p>
         </div>
 
-        <!-- Info Sesi Pasangan Aktif (Jika Terdaftar) atau Banner Langkah 1 (Jika Belum) -->
+        <!-- Info Sesi Murid Aktif (Jika Terdaftar) atau Banner Langkah 1 (Jika Belum) -->
         ${this.session
         ? `
           <div class="tactile-panel" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 12px 14px; background: #ffffff; border: 1px solid rgba(15, 118, 110, 0.25); border-radius: 10px; gap: 10px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03);">
@@ -1153,8 +1183,13 @@ export class UIManager {
                 ${renderTeamSymbolPixelArt(this.session.teamSymbol, 28)}
               </div>
               <div>
-                <span class="eyebrow-label" style="color: var(--primary); font-size: 9px;">TIM ${escapeHtml(this.session.teamSymbol.toUpperCase())}</span>
-                <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">${escapeHtml(this.session.pairId)} (${escapeHtml(this.session.student1Name)} &amp; ${escapeHtml(this.session.student2Name)})</div>
+                <span class="eyebrow-label" style="color: var(--primary); font-size: 9px;">${this.session.studentName ? 'PENYELIDIK LOGIKA' : `AVATAR ${escapeHtml(this.session.teamSymbol.toUpperCase())}`}</span>
+                <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">
+                  ${this.session.studentName
+          ? `Absen ${String(this.session.studentAbsen || 0).padStart(2, '0')} • ${escapeHtml(this.session.studentName)}`
+          : `${escapeHtml(this.session.pairId)} (${escapeHtml(this.session.student1Name)} &amp; ${escapeHtml(this.session.student2Name)})`
+        }
+                </div>
               </div>
             </div>
             <span class="badge-pill" style="color: var(--primary); background: rgba(15, 118, 110, 0.08); border-color: rgba(15, 118, 110, 0.25); font-weight: 700; flex-shrink: 0;">
@@ -1191,7 +1226,7 @@ export class UIManager {
                   ${hasReadGuide ? 'Langkah 1 Selesai' : 'Langkah 1: Baca Panduan'}
                 </div>
                 <div style="font-size: 11.5px; color: var(--text-secondary); margin-top: 2px;">
-                  ${hasReadGuide ? 'Panduan telah dipahami. Silakan lakukan pendaftaran tim.' : 'Wajib membaca panduan sebelum mendaftar.'}
+                  ${hasReadGuide ? 'Panduan telah dipahami. Silakan daftarkan profil kamu.' : 'Wajib membaca panduan sebelum mendaftar.'}
                 </div>
               </div>
             </div>
@@ -1212,44 +1247,57 @@ export class UIManager {
             <button id="btn-start-game" type="button" class="game-btn" style="width: 100%; min-height: 46px; font-size: 11.5px; background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); color: var(--text-muted); gap: 8px; cursor: pointer;" title="Baca panduan petualangan terlebih dahulu">
               ${renderPixelIcon('lock', 12, 'var(--text-muted)')} 2. Mulai Pendaftaran (Terkunci)
             </button>
-          ` : `
+            <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
+              ${renderPixelIcon('gear', 14, 'var(--primary)')} Pengaturan Sistem
+            </button>
+          ` : !hasSession && hasReadGuide ? `
             <button id="btn-start-game" type="button" class="game-btn game-btn-gold" style="width: 100%; min-height: 48px; font-size: 12.5px; letter-spacing: 0.3px; font-family: var(--font-pixel);">
-              ${renderPixelIcon('play', 12, '#ffffff')} ${this.session ? 'Lanjutkan Misi' : 'Mulai Pendaftaran'}
+              ${renderPixelIcon('play', 12, '#ffffff')} Daftarkan Profil Murid
             </button>
-            <button id="btn-menu-overworld" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
-              ${renderPixelIcon('map', 14, 'var(--primary)')} Peta Kota Harmoni
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <button id="btn-menu-panduan" type="button" class="game-btn game-btn-secondary" style="min-height: 42px; font-size: 11.5px;">
+                ${renderPixelIcon('help', 13, 'var(--primary)')} Panduan ${renderPixelIcon('check', 10, 'var(--success)')}
+              </button>
+              <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="min-height: 42px; font-size: 11.5px;">
+                ${renderPixelIcon('gear', 13, 'var(--primary)')} Pengaturan
+              </button>
+            </div>
+          ` : `
+            <!-- Sesi Murid Aktif Terdaftar -->
+            <button id="btn-start-game" type="button" class="game-btn game-btn-gold" style="width: 100%; min-height: 48px; font-size: 12.5px; letter-spacing: 0.3px; font-family: var(--font-pixel);">
+              ${renderPixelIcon('play', 12, '#ffffff')} Lanjutkan Petualangan Logika
             </button>
-            <button id="btn-menu-panduan" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
-              ${renderPixelIcon('help', 14, 'var(--primary)')} Panduan Petualangan ${hasReadGuide ? renderPixelIcon('check', 11, 'var(--success)') : ''}
+            <button id="btn-menu-progres" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12px; gap: 8px; font-weight: 600;">
+              ${renderPixelIcon('trophy', 14, 'var(--primary)')} Lihat Portofolio &amp; Capaian Nilai
             </button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <button id="btn-menu-panduan" type="button" class="game-btn game-btn-secondary" style="min-height: 42px; font-size: 11.5px;">
+                ${renderPixelIcon('help', 13, 'var(--primary)')} Panduan
+              </button>
+              <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="min-height: 42px; font-size: 11.5px;">
+                ${renderPixelIcon('gear', 13, 'var(--primary)')} Pengaturan
+              </button>
+            </div>
           `}
-          <a id="btn-menu-drive-lkpd" href="${escapeHtml(sanitizeWebUrl(StorageService.getDriveUrlSync()))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Folder Google Drive LKPD Siklus 1">
-            ${renderPixelIcon('drive', 14, 'var(--primary)')} Folder Drive LKPD Siklus 1
-          </a>
-          <button id="btn-menu-settings" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12.5px;">
-            ${renderPixelIcon('gear', 14, 'var(--primary)')} Pengaturan Sistem
-          </button>
-          ${this.session
-        ? `<button id="btn-menu-reset" type="button" class="game-btn" style="width: 100%; min-height: 38px; background: transparent; border: 1.5px solid rgba(220, 38, 38, 0.4); color: var(--danger); font-size: 11.5px;">
-                    ${renderPixelIcon('refresh', 13, 'var(--danger)')} Ganti Identitas Tim
-                  </button>`
-        : ''
-      }
         </div>
 
-        <div style="margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border-retro); font-family: var(--font-code); font-size: 10px; color: var(--text-muted); text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: var(--success);"></span>
-          Mode Offline Aktif • Data tersimpan di perangkat
+        <!-- Footer Bersih & Link Ganti Akun Murid yang Aman -->
+        <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border-retro); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <div style="font-family: var(--font-code); font-size: 10px; color: var(--text-muted); display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: var(--success);"></span>
+            Mode Offline Aktif • Data tersimpan di perangkat
+          </div>
+          ${this.session ? `
+            <button id="btn-menu-reset" type="button" style="background: none; border: none; font-size: 11px; color: var(--text-muted); cursor: pointer; text-decoration: underline; padding: 4px 8px; font-family: var(--font-ui); transition: color 0.15s ease;">
+              Ingin berganti akun? Ganti Profil Murid
+            </button>
+          ` : ''}
         </div>
       </div>
     `;
 
     wrapper.querySelector('#hero-menu-logo')?.addEventListener('click', () => {
       this.handleLogoClick();
-    });
-
-    wrapper.querySelector('#btn-menu-drive-lkpd')?.addEventListener('click', () => {
-      soundFx.playButtonBlip();
     });
 
     wrapper.querySelector('#btn-menu-token')?.addEventListener('click', () => {
@@ -1261,7 +1309,7 @@ export class UIManager {
       if (!this.session) {
         if (!hasReadGuide) {
           soundFx.playLogicFalse();
-          this.showRetroToast('Kalian wajib membaca Panduan Petualangan terlebih dahulu sebelum mendaftar!', false);
+          this.showRetroToast('Kamu wajib membaca Panduan Petualangan terlebih dahulu sebelum mendaftar!', false);
           setTimeout(() => {
             this.setScreen('PANDUAN');
           }, 500);
@@ -1275,25 +1323,28 @@ export class UIManager {
       }
     });
 
-    wrapper.querySelector<HTMLButtonElement>('#btn-menu-overworld')?.addEventListener('click', () => {
-      this.setScreen('OVERWORLD');
+    wrapper.querySelector<HTMLButtonElement>('#btn-menu-progres')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.setScreen('PROGRES');
     });
 
     wrapper.querySelector<HTMLButtonElement>('#btn-menu-panduan')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
       this.setScreen('PANDUAN');
     });
 
     wrapper.querySelector<HTMLButtonElement>('#btn-menu-settings')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
       this.setScreen('SETTINGS');
     });
 
     wrapper.querySelector<HTMLButtonElement>('#btn-menu-reset')?.addEventListener('click', () => {
       this.showCelebrationModal(
-        'Ganti Pasangan Belajar',
-        'Apakah kalian yakin ingin mengganti akun tim belajar? Data progres yang telah dicapai tetap tersimpan di penyimpanan perangkat lokal.',
+        'Ganti Profil Murid',
+        'Apakah kamu yakin ingin mengganti akun profil murid? Data progres yang telah dicapai tetap tersimpan di penyimpanan perangkat lokal.',
         [
           {
-            label: 'Ganti Tim',
+            label: 'Ganti Profil',
             isPrimary: true,
             action: async () => {
               await StorageService.clearSession();
@@ -1314,7 +1365,7 @@ export class UIManager {
   }
 
   // =================================================================
-  // Layar: Panduan Permainan & Alur Aksi Peserta (Pair Programming)
+  // Layar: Panduan Permainan & Alur Aksi Murid (Progressive Disclosure Stack)
   // =================================================================
   private renderScreenPanduan(): HTMLElement {
     const container = document.createElement('div');
@@ -1323,10 +1374,15 @@ export class UIManager {
     const hasSession = !!this.session;
     const hasReadGuide = !!(this.progressionState?.stepGuideCompleted || this.progressionState?.teacherBypassMode || hasSession);
 
+    // Jika murid sudah pernah menuntaskan panduan, seluruh stack langsung terbuka agar bebas dibaca ulang
+    if (hasReadGuide) {
+      this.maxUnlockedGuideStack = 3;
+    }
+
     container.style.cssText = `
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 14px;
       width: 100%;
       max-width: 960px;
       margin: 0 auto;
@@ -1335,299 +1391,530 @@ export class UIManager {
 
     container.innerHTML = `
       <!-- 1. Header Panduan Dossier -->
-      <div class="tactile-card" style="padding: 22px 24px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
+      <div class="tactile-card" style="padding: 20px 22px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
           <div>
-            <span class="eyebrow-label" style="color: var(--primary); margin-bottom: 4px; display: block;">
+            <span class="eyebrow-label" style="color: var(--primary); margin-bottom: 3px; display: block;">
               Panduan Belajar Murid • Informatika
             </span>
-            <h1 style="font-size: 17px; font-weight: 700; color: var(--text-primary); margin: 4px 0 2px; letter-spacing: 0.2px;">
+            <h1 style="font-size: 16.5px; font-weight: 700; color: var(--text-primary); margin: 3px 0 2px; letter-spacing: 0.2px;">
               Petunjuk Petualangan &amp; Alur Misi Logika
             </h1>
-            <p style="font-size: 12.5px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
-              Panduan terstruktur untuk menelusuri logika percabangan <em>if-else</em> secara berpasangan.
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              Panduan terstruktur untuk menelusuri logika percabangan <em>if-else</em> secara mandiri terbimbing.
             </p>
           </div>
           <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: var(--warning-dark); background: rgba(217, 119, 6, 0.08); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(217, 119, 6, 0.2); letter-spacing: 0.3px;">
             <span style="width: 5px; height: 5px; border-radius: 50%; background-color: var(--warning-dark);"></span>
-            1 Gawai • 2 Murid
+            1 Murid • 1 Gawai
           </span>
         </div>
+        <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 0;">
+          Pelajari 3 tahap panduan di bawah ini secara berurutan untuk memahami alur petualangan logika di kelas.
+        </p>
+      </div>
 
-        <!-- Kartu Kolaborasi Berpasangan (Pair Programming) -->
-        <div style="padding: 16px 18px; border: 1px solid rgba(15, 118, 110, 0.18); background: rgba(15, 118, 110, 0.02); border-radius: 10px;">
-          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-            <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: rgba(15, 118, 110, 0.08); font-size: 11px; font-weight: 700; color: var(--primary);">
-              ${renderPixelIcon('gamepad', 13, 'var(--primary)')} Pola Belajar Berpasangan (Pair Programming)
-            </span>
-          </div>
-          <p style="font-size: 12.5px; color: var(--text-primary); line-height: 1.6; margin-bottom: 10px;">
-            Kalian belajar dalam tim beranggotakan <strong>2 orang murid dengan 1 smartphone/komputer bersama</strong>:
-          </p>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; font-size: 12px; color: var(--text-secondary);">
-            <div style="padding: 12px 14px; background: #ffffff; border: 1px solid rgba(28, 25, 23, 0.07); border-radius: 8px; box-shadow: 0 1px 2px rgba(28, 25, 23, 0.02);">
-              <strong style="color: var(--primary); display: block; margin-bottom: 2px;">Pengendali Layar (Gawai):</strong>
-              Memasukkan angka uji coba, menentukan tebakan alur, dan menekan tombol telusur.
-            </div>
-            <div style="padding: 12px 14px; background: #ffffff; border: 1px solid rgba(28, 25, 23, 0.07); border-radius: 8px; box-shadow: 0 1px 2px rgba(28, 25, 23, 0.02);">
-              <strong style="color: var(--primary); display: block; margin-bottom: 2px;">Pencatat Lembar Kerja (LKPD Fisik):</strong>
-              Menuliskan hasil pembuktian baris kode dan simpulan pada lembar kertas kelompok.
-            </div>
-          </div
+      <!-- Bilah Stepper Progres Panduan -->
+      <div class="guide-stepper-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <span style="font-family: var(--font-code); font-size: 11px; font-weight: 700; color: var(--primary); display: inline-flex; align-items: center; gap: 6px;">
+            ${renderPixelIcon('target', 12, 'var(--primary)')} Langkah Panduan Bertahap
+          </span>
+          <span id="guide-progress-text" style="font-family: var(--font-code); font-size: 10.5px; font-weight: 700; color: var(--text-secondary);">
+            Tahap ${this.activeGuideStack} dari 3 • ${hasReadGuide || this.maxUnlockedGuideStack === 3 ? '100% Siap' : `${Math.round((this.activeGuideStack / 3) * 100)}% Dibaca`}
+          </span>
+        </div>
+        <div class="guide-progress-track">
+          <div id="guide-progress-fill" class="guide-progress-fill" style="width: ${hasReadGuide || this.maxUnlockedGuideStack === 3 ? '100%' : `${(this.activeGuideStack / 3) * 100}%`};"></div>
+        </div>
+        <div class="guide-stepper-pills">
+          <button id="guide-stepper-pill-1" type="button" class="guide-stepper-pill ${this.activeGuideStack === 1 ? 'active' : (this.maxUnlockedGuideStack >= 2 ? 'completed' : '')}">
+            ${renderPixelIcon('gamepad', 12, 'currentColor')} <span>1. Pola Belajar</span>
+          </button>
+          <button id="guide-stepper-pill-2" type="button" class="guide-stepper-pill ${this.activeGuideStack === 2 ? 'active' : (this.maxUnlockedGuideStack >= 3 ? 'completed' : (this.maxUnlockedGuideStack < 2 && !hasReadGuide ? 'locked' : ''))}">
+            ${renderPixelIcon(this.maxUnlockedGuideStack >= 2 || hasReadGuide ? 'map' : 'lock', 12, 'currentColor')} <span>2. Struktur Siklus</span>
+          </button>
+          <button id="guide-stepper-pill-3" type="button" class="guide-stepper-pill ${this.activeGuideStack === 3 ? 'active' : (this.maxUnlockedGuideStack >= 3 ? (hasReadGuide ? 'completed' : '') : (hasReadGuide ? '' : 'locked'))}">
+            ${renderPixelIcon(this.maxUnlockedGuideStack >= 3 || hasReadGuide ? 'target' : 'lock', 12, 'currentColor')} <span>3. Alur 6 Misi</span>
+          </button>
         </div>
       </div>
 
-      <!-- 2. Peta Tahapan 2 Siklus Belajar (Siklus 1 Dasar vs Siklus 2 Maju) -->
-      <div class="tactile-card" style="padding: 22px 24px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
-          <div>
-            <span class="eyebrow-label" style="color: var(--primary);">Struktur Tahapan Belajar</span>
-            <h2 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">
-              Pembagian 2 Siklus Perjalanan Logika
-            </h2>
+      <!-- STACK 1: Pola Belajar Mandiri Terbimbing -->
+      <div id="guide-stack-card-1" class="guide-stack-card active">
+        <button id="guide-stack-header-1" type="button" class="guide-stack-header" aria-expanded="true">
+          <div class="guide-stack-title-box">
+            <div class="guide-stack-num-badge">01</div>
+            <div>
+              <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                Pola Belajar Mandiri Terbimbing
+              </div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                1 Murid • 1 Gawai (Simulasi iobranch &amp; LKPD Rangkuman)
+              </div>
+            </div>
           </div>
-          <span style="display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-code); font-size: 10.5px; font-weight: 700; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--primary)'}; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.25)' : 'rgba(15, 118, 110, 0.25)'}; background: ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.08)' : 'rgba(15, 118, 110, 0.08)'}; padding: 3px 8px; border-radius: 6px;">
-            <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
-            Status: ${this.isCycle2Unlocked ? 'Siklus 2 (Maju)' : 'Siklus 1 (Dasar)'}
-          </span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="guide-stack-badge-1" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); border: 1px solid rgba(15, 118, 110, 0.25); background: rgba(15, 118, 110, 0.08); display: inline-flex; align-items: center; gap: 4px;">
+              <span style="width: 5px; height: 5px; border-radius: 50%; background: var(--primary);"></span> Sedang Dibaca
+            </span>
+            <span id="guide-stack-chevron-1" class="guide-stack-chevron expanded">
+              ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+            </span>
+          </div>
+        </button>
+
+        <div id="guide-stack-body-1" class="guide-stack-body">
+          <p style="font-size: 12.5px; color: var(--text-primary); line-height: 1.6; margin-bottom: 12px;">
+            Setiap murid memegang <strong>1 gawai/smartphone masing-masing</strong> untuk melakukan penyelidikan logika terpandu:
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 10px; font-size: 12px; color: var(--text-secondary);">
+            <div style="padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.07); border-radius: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                ${renderPixelIcon('gamepad', 13, 'var(--primary)')}
+                <strong style="color: var(--primary);">Penyelidikan Interaktif (Gawai iobranch):</strong>
+              </div>
+              Memasukkan nilai uji kasus, mengamati eksekusi percabangan baris demi baris, dan menyelesaikan tantangan logika.
+            </div>
+            <div style="padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.07); border-radius: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                ${renderPixelIcon('document', 13, 'var(--primary)')}
+                <strong style="color: var(--primary);">Rangkuman Mandiri (LKPD Kertas):</strong>
+              </div>
+              Membaca materi dengan teliti dan merangkum konsep, tabel operator, pola kode, serta catatan penting pada lembar kerja kertas di mejamu.
+            </div>
+          </div>
+
+          <div class="guide-advance-btn-box">
+            <button id="btn-advance-stack-1" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 46px; font-size: 12.5px; font-weight: 700; gap: 8px; justify-content: center;">
+              <span>Pahami Pola Ini &amp; Lanjut ke Tahap 2: Struktur Siklus</span>
+              ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+            </button>
+          </div>
         </div>
+      </div>
 
-        <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 14px;">
-          Pembelajaran dibagi menjadi dua tahapan bertingkat. Kalian akan menguasai logika percabangan dasar terlebih dahulu sebelum melangkah ke percabangan majemuk yang lebih menantang:
-        </p>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px;">
-          <!-- Kartu Siklus 1 -->
-          <div style="padding: 16px 18px; border: 1px solid ${!this.isCycle2Unlocked ? 'rgba(15, 118, 110, 0.3)' : 'rgba(28, 25, 23, 0.08)'}; background-color: ${!this.isCycle2Unlocked ? 'var(--surface-panel)' : 'var(--surface-panel-alt)'}; border-radius: 10px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03); position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <span style="font-family: var(--font-ui); font-size: 11px; font-weight: 700; color: var(--primary); letter-spacing: 0.3px;">
-                Siklus 1 (Dasar)
-              </span>
-              <span style="font-size: 10px; font-weight: 700; color: var(--success); border: 1px solid rgba(21, 128, 61, 0.25); background: rgba(21, 128, 61, 0.08); padding: 2px 7px; border-radius: 5px;">
-                Terbuka Langsung
-              </span>
-            </div>
-            <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;">
-              Fondasi Percabangan IF &amp; IF-ELSE
-            </h3>
-            <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px;">
-              Memahami logika pengambilan keputusan satu arah dan dua arah berdasarkan kondisi nilai numerik:
-            </p>
-            <ul style="margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--text-primary); line-height: 1.6;">
-              <li><strong>Modul 1:</strong> Gerbang Tiket Stasiun MRT &ndash; Operator Relasional &amp; Evaluasi Boolean (<code>==</code>, <code>&gt;=</code>, <code>&lt;=</code>)</li>
-              <li><strong>Modul 2:</strong> Sistem Alarm Suhu Server &ndash; Percabangan Tunggal (IF)</li>
-              <li><strong>Modul 3:</strong> Kasir Kantin Cerdas (Kupon Diskon) &ndash; Percabangan Ganda (IF - ELSE)</li>
-            </ul>
-            <div style="margin-top: 12px; padding: 9px 12px; background: var(--surface-panel-alt); border-radius: 6px; border: 1px solid rgba(28, 25, 23, 0.06); font-size: 11px; color: var(--text-secondary);">
-              <strong style="color: var(--text-primary);">Target Keberhasilan:</strong> Membuka 2 Bintang (uji semua jalur kondisi: IF dan ELSE) pada setiap kasus.
+      <!-- STACK 2: Struktur Tahapan 2 Siklus Belajar -->
+      <div id="guide-stack-card-2" class="guide-stack-card ${hasReadGuide ? '' : 'locked'}">
+        <button id="guide-stack-header-2" type="button" class="guide-stack-header" aria-expanded="false">
+          <div class="guide-stack-title-box">
+            <div class="guide-stack-num-badge">02</div>
+            <div>
+              <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                Pembagian 2 Siklus Perjalanan Logika
+              </div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                Fondasi Dasar (Siklus 1) vs Percabangan Majemuk (Siklus 2)
+              </div>
             </div>
           </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="guide-stack-badge-2" class="badge-pill" style="font-size: 10px; font-weight: 700; color: ${hasReadGuide ? 'var(--success)' : 'var(--text-muted)'}; border: 1px solid ${hasReadGuide ? 'rgba(21, 128, 61, 0.25)' : 'rgba(28, 25, 23, 0.15)'}; background: ${hasReadGuide ? 'rgba(21, 128, 61, 0.08)' : 'rgba(0, 0, 0, 0.04)'}; display: inline-flex; align-items: center; gap: 4px;">
+              ${renderPixelIcon(hasReadGuide ? 'check' : 'lock', 10, 'currentColor')} ${hasReadGuide ? 'Selesai Dibaca' : 'Terkunci'}
+            </span>
+            <span id="guide-stack-chevron-2" class="guide-stack-chevron">
+              ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+            </span>
+          </div>
+        </button>
 
-          <!-- Kartu Siklus 2 -->
-          <div style="position: relative; overflow: hidden; border: 1px ${this.isCycle2Unlocked ? 'solid rgba(217, 119, 6, 0.3)' : 'dashed rgba(217, 119, 6, 0.40)'}; background-color: ${this.isCycle2Unlocked ? 'var(--surface-panel)' : 'rgba(217, 119, 6, 0.04)'}; border-radius: 10px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03);">
-            <!-- Konten kartu (selalu dirender, diblur saat terkunci) -->
-            <div style="padding: 16px 18px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
+        <div id="guide-stack-body-2" class="guide-stack-body" style="display: none;">
+          <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 12px;">
+            Pembelajaran dibagi menjadi dua tahapan bertingkat. Kamu akan menguasai logika percabangan dasar terlebih dahulu sebelum melangkah ke percabangan majemuk yang lebih menantang:
+          </p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px;">
+            <!-- Kartu Siklus 1 -->
+            <div style="padding: 16px 18px; border: 1px solid ${!this.isCycle2Unlocked ? 'rgba(15, 118, 110, 0.3)' : 'rgba(28, 25, 23, 0.08)'}; background-color: ${!this.isCycle2Unlocked ? 'var(--surface-panel)' : 'var(--surface-panel-alt)'}; border-radius: 10px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03); position: relative;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-family: var(--font-ui); font-size: 11px; font-weight: 700; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--text-muted)'}; letter-spacing: 0.3px;">
-                  Siklus 2 (Lanjutan)
+                <span style="font-family: var(--font-ui); font-size: 11px; font-weight: 700; color: var(--primary); letter-spacing: 0.3px;">
+                  Siklus 1 (Dasar)
                 </span>
-                <span style="font-size: 10px; font-weight: 700; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--text-muted)'}; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.25)' : 'rgba(28, 25, 23, 0.1)'}; background: ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.08)' : 'rgba(0,0,0,0.03)'}; padding: 2px 7px; border-radius: 5px;">
-                  ${this.isCycle2Unlocked ? 'Aktif di Gawai' : 'Terkunci Saat Ini'}
+                <span style="font-size: 10px; font-weight: 700; color: var(--success); border: 1px solid rgba(21, 128, 61, 0.25); background: rgba(21, 128, 61, 0.08); padding: 2px 7px; border-radius: 5px;">
+                  Terbuka Langsung
                 </span>
               </div>
               <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;">
-                Percabangan Bertingkat &amp; Majemuk
+                Fondasi Percabangan IF &amp; IF-ELSE
               </h3>
               <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px;">
-                Menyelesaikan masalah dengan kondisi berantai dan banyak pilihan aksi yang saling bertingkat:
+                Memahami logika pengambilan keputusan satu arah dan dua arah berdasarkan kondisi nilai numerik:
               </p>
               <ul style="margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--text-primary); line-height: 1.6;">
-                <li><strong>Modul 4:</strong> Klasifikasi Kecepatan Paket Data &ndash; Percabangan Bertingkat (ELSE - IF)</li>
-                <li><strong>Modul 5:</strong> Pemilih Menu Minuman Otomatis &ndash; Percabangan Multi-Kategori (SWITCH - CASE)</li>
+                <li><strong>Modul 1:</strong> Gerbang Tiket Stasiun MRT &ndash; Operator Relasional &amp; Evaluasi Boolean (<code>==</code>, <code>&gt;=</code>, <code>&lt;=</code>)</li>
+                <li><strong>Modul 2:</strong> Sistem Alarm Suhu Server &ndash; Percabangan Tunggal (IF)</li>
+                <li><strong>Modul 3:</strong> Kasir Kantin Cerdas (Kupon Diskon) &ndash; Percabangan Ganda (IF - ELSE)</li>
               </ul>
               <div style="margin-top: 12px; padding: 9px 12px; background: var(--surface-panel-alt); border-radius: 6px; border: 1px solid rgba(28, 25, 23, 0.06); font-size: 11px; color: var(--text-secondary);">
-                <strong style="color: var(--text-primary);">Keterangan:</strong> ${this.isCycle2Unlocked ? 'Modul Siklus 2 telah dibuka dan siap dimainkan.' : 'Akan dibuka pada pertemuan kelas Siklus 2 oleh Guru Informatika.'}
+                <strong style="color: var(--text-primary);">Target Keberhasilan:</strong> Membuka 2 Bintang (uji semua jalur kondisi: IF dan ELSE) pada setiap kasus.
               </div>
             </div>
 
-            <!-- Overlay kunci (hanya tampil saat terkunci) -->
-            ${this.isCycle2Unlocked ? '' : `
-              <div style="position: absolute; inset: 0; background: rgba(245, 241, 232, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 10px;">
-                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                  ${renderPixelIcon('lock', 20, 'var(--warning-dark)')}
-                  <span style="font-family: var(--font-pixel); font-size: 8.5px; color: var(--warning-dark); letter-spacing: 0.5px; text-align: center;">SIKLUS 2 TERKUNCI</span>
+            <!-- Kartu Siklus 2 -->
+            <div style="position: relative; overflow: hidden; border: 1px ${this.isCycle2Unlocked ? 'solid rgba(217, 119, 6, 0.3)' : 'dashed rgba(217, 119, 6, 0.40)'}; background-color: ${this.isCycle2Unlocked ? 'var(--surface-panel)' : 'rgba(217, 119, 6, 0.04)'}; border-radius: 10px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03);">
+              <div style="padding: 16px 18px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <span style="font-family: var(--font-ui); font-size: 11px; font-weight: 700; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--text-muted)'}; letter-spacing: 0.3px;">
+                    Siklus 2 (Lanjutan)
+                  </span>
+                  <span style="font-size: 10px; font-weight: 700; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--text-muted)'}; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.25)' : 'rgba(28, 25, 23, 0.1)'}; background: ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.08)' : 'rgba(0,0,0,0.03)'}; padding: 2px 7px; border-radius: 5px;">
+                    ${this.isCycle2Unlocked ? 'Aktif di Gawai' : 'Terkunci Saat Ini'}
+                  </span>
                 </div>
-                <button id="btn-unlock-cycle2-materi" type="button" class="game-btn game-btn-gold" style="font-size: 11px; padding: 6px 14px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-                  ${renderPixelIcon('unlock', 10, '#ffffff')} Buka Siklus 2
+                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;">
+                  Percabangan Bertingkat &amp; Majemuk
+                </h3>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px;">
+                  Menyelesaikan masalah dengan kondisi berantai dan banyak pilihan aksi yang saling bertingkat:
+                </p>
+                <ul style="margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--text-primary); line-height: 1.6;">
+                  <li><strong>Modul 4:</strong> Klasifikasi Kecepatan Paket Data &ndash; Percabangan Bertingkat (ELSE - IF)</li>
+                  <li><strong>Modul 5:</strong> Pemilih Menu Minuman Otomatis &ndash; Percabangan Multi-Kategori (SWITCH - CASE)</li>
+                </ul>
+                <div style="margin-top: 12px; padding: 9px 12px; background: var(--surface-panel-alt); border-radius: 6px; border: 1px solid rgba(28, 25, 23, 0.06); font-size: 11px; color: var(--text-secondary);">
+                  <strong style="color: var(--text-primary);">Keterangan:</strong> ${this.isCycle2Unlocked ? 'Modul Siklus 2 telah dibuka dan siap dimainkan.' : 'Akan dibuka pada pertemuan kelas Siklus 2 oleh Guru Informatika.'}
+                </div>
+              </div>
+
+              ${this.isCycle2Unlocked ? '' : `
+                <div style="position: absolute; inset: 0; background: rgba(245, 241, 232, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 14px; border-radius: 10px;">
+                  <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                    ${renderPixelIcon('lock', 20, 'var(--warning-dark)')}
+                    <span style="font-family: var(--font-pixel); font-size: 8.5px; color: var(--warning-dark); letter-spacing: 0.5px; text-align: center;">SIKLUS 2 TERKUNCI</span>
+                  </div>
+                  <button id="btn-unlock-cycle2-materi" type="button" class="game-btn game-btn-gold" style="font-size: 11px; padding: 6px 14px; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+                    ${renderPixelIcon('unlock', 10, '#ffffff')} Buka Siklus 2
+                  </button>
+                </div>
+              `}
+            </div>
+          </div>
+
+          <div class="guide-advance-btn-box">
+            <button id="btn-advance-stack-2" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 46px; font-size: 12.5px; font-weight: 700; gap: 8px; justify-content: center;">
+              <span>Pahami Struktur Siklus &amp; Lanjut ke Tahap 3: 6 Langkah Misi</span>
+              ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STACK 3: Urutan Kegiatan Kelas (6 Langkah Misi) -->
+      <div id="guide-stack-card-3" class="guide-stack-card ${hasReadGuide ? '' : 'locked'}">
+        <button id="guide-stack-header-3" type="button" class="guide-stack-header" aria-expanded="false">
+          <div class="guide-stack-title-box">
+            <div class="guide-stack-num-badge">03</div>
+            <div>
+              <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                Urutan Kegiatan Kelas (6 Langkah Misi)
+              </div>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                Alur Lengkap Pembelajaran Berbasis Masalah (PBL)
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="guide-stack-badge-3" class="badge-pill" style="font-size: 10px; font-weight: 700; color: ${hasReadGuide ? 'var(--success)' : 'var(--text-muted)'}; border: 1px solid ${hasReadGuide ? 'rgba(21, 128, 61, 0.25)' : 'rgba(28, 25, 23, 0.15)'}; background: ${hasReadGuide ? 'rgba(21, 128, 61, 0.08)' : 'rgba(0, 0, 0, 0.04)'}; display: inline-flex; align-items: center; gap: 4px;">
+              ${renderPixelIcon(hasReadGuide ? 'check' : 'lock', 10, 'currentColor')} ${hasReadGuide ? 'Selesai Dibaca' : 'Terkunci'}
+            </span>
+            <span id="guide-stack-chevron-3" class="guide-stack-chevron">
+              ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+            </span>
+          </div>
+        </button>
+
+        <div id="guide-stack-body-3" class="guide-stack-body" style="display: none;">
+          <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;">
+            <!-- Langkah 1 -->
+            <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
+              <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
+                01
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    Pahami Panduan &amp; Daftarkan Profil Murid
+                  </h3>
+                  <span style="font-size: 9.5px; font-weight: 600; color: var(--text-muted); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">Menu Beranda</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
+                  Pahami panduan petualangan di halaman ini, lalu klik tombol pendaftaran di menu <strong>Beranda</strong>. Masukkan Nomor Absen (1–46) serta Nama Lengkap kamu untuk mengaktifkan identitas penyelidik logika mandiri.
+                </p>
+              </div>
+            </div>
+
+            <!-- Langkah 2 -->
+            <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
+              <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
+                02
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    Orientasi Masalah bersama Guru Pak Budi
+                  </h3>
+                  <span style="font-size: 9.5px; font-weight: 600; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Dialog / Peta</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
+                  Masuki <strong>Peta Kota</strong> dan temui Guru Pak Budi di ujung kiri jalan untuk mendengarkan kronologi gangguan otomasi Kota Harmoni serta menyelesaikan tantangan nalar awal sebagai syarat pembuka ruang kelas materi.
+                </p>
+              </div>
+            </div>
+
+            <!-- Langkah 3 -->
+            <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
+              <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
+                03
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    Bedah Konsep &amp; Uji Simulator di Ruang Kelas
+                  </h3>
+                  <span style="font-size: 9.5px; font-weight: 600; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Materi</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
+                  Pelajari aturan percabangan logika di tab <strong>Materi</strong>, amati bagan alur (<em>flowchart</em>), dan buktikan kondisi pada simulator interaktif hingga menekan tombol konfirmasi lanjut ke lab komputer.
+                </p>
+              </div>
+            </div>
+
+            <!-- Langkah 4 -->
+            <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
+              <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--warning-dark); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
+                04
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    Tebak Alur &amp; Raih 2 Bintang di Lab Telusur
+                  </h3>
+                  <span style="font-size: 9.5px; font-weight: 600; color: var(--warning-dark); background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(217, 119, 6, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Telusur</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
+                  Tentukan tebakan alur (<em>Benar</em> atau <em>Salah</em>) sebelum menjalankan simulasi baris demi baris di tab <strong>Telusur</strong>. Uji seluruh cabang kondisi (IF dan ELSE) hingga meraih <strong>Bintang 2 (100% Teruji)</strong> untuk membuka arena tantangan.
+                </p>
+              </div>
+            </div>
+
+            <!-- Langkah 5 -->
+            <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
+              <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--danger); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
+                05
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    Taklukkan Bug Monster di Arena Tantangan
+                  </h3>
+                  <span style="font-size: 9.5px; font-weight: 600; color: var(--danger); background: rgba(220, 38, 38, 0.08); border: 1px solid rgba(220, 38, 38, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Tantangan</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
+                  Hadapi Bug Monster yang menginfeksi sistem di tab <strong>Tantangan</strong> (Taman Kota). Analisis nilai variabel saat giliran bertarung dan luncurkan serangan logika yang tepat untuk mengeliminasi bug.
+                </p>
+              </div>
+            </div>
+
+            <!-- Langkah 6 -->
+            <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
+              <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--success); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
+                06
+              </div>
+              <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                  <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
+                    Evaluasi Reflektif &amp; Kirim Rekap ke Guru
+                  </h3>
+                  <span style="font-size: 9.5px; font-weight: 600; color: var(--success); background: rgba(21, 128, 61, 0.08); border: 1px solid rgba(21, 128, 61, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Evaluasi &amp; Progres</span>
+                </div>
+                <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
+                  Jawab butir evaluasi formatif mandiri di tab <strong>Evaluasi</strong>, periksa perolehan lencana di tab <strong>Progres</strong>, unduh laporan teks (.txt) dan kirimkan ke <strong>Google Drive Guru</strong>, serta pastikan lembar LKPD rangkuman materimu sudah terisi lengkap.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Konfirmasi Final Card -->
+          <div class="tactile-card" style="padding: 22px 20px; text-align: center; border: 1px solid ${!hasReadGuide ? 'rgba(15, 118, 110, 0.3)' : 'var(--border-subtle)'}; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 8px -2px rgba(15, 118, 110, 0.06);">
+            <div style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(15, 118, 110, 0.08); margin-bottom: 10px; border: 1px solid rgba(15, 118, 110, 0.25);">
+              ${renderPixelIcon(hasReadGuide ? 'check' : 'book', 22, 'var(--primary)')}
+            </div>
+            <h2 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
+              ${!hasReadGuide ? 'Sudah Memahami Seluruh Alur Panduan?' : 'Siap Melanjutkan Penelusuran Logika?'}
+            </h2>
+            <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 16px; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.55;">
+              ${!hasReadGuide
+                ? 'Setelah menuntaskan 3 tahap panduan di atas, klik tombol di bawah untuk membuka formulir pendaftaran profil belajar murid.'
+                : 'Kamu telah menuntaskan seluruh panduan petualangan! Pilihlah salah satu menu di bawah untuk memulai penelusuran logika.'
+              }
+            </p>
+
+            <div class="guide-nav-bar">
+              ${!hasReadGuide ? `
+                <button id="btn-complete-guide" type="button" class="game-btn game-btn-gold" style="min-height: 46px; font-size: 12px; font-family: var(--font-pixel); width: 100%; max-width: 440px; gap: 8px;">
+                  ${renderPixelIcon('check', 13, '#ffffff')} Saya Paham Panduan, Daftarkan Profil ${renderPixelIcon('arrow-right', 12, '#ffffff')}
                 </button>
-              </div>
-            `}
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. Urutan Kegiatan Kelas (6 Langkah Misi) -->
-      <div class="tactile-card" style="padding: 22px 24px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
-        <div style="margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
-          <span class="eyebrow-label" style="color: var(--primary);">Urutan Kegiatan Kelas</span>
-          <h2 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">
-            6 Langkah Misi yang Harus Dilakukan
-          </h2>
-        </div>
-
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-          <!-- Langkah 1 -->
-          <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
-            <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              01
-            </div>
-            <div style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
-                  Pahami Panduan &amp; Daftarkan Tim Belajar
-                </h3>
-                <span style="font-size: 9.5px; font-weight: 600; color: var(--text-muted); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px;">Menu Beranda</span>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
-                Pahami panduan petualangan di halaman ini, lalu klik tombol pendaftaran di menu <strong>Beranda</strong>. Masukkan Nomor Absen serta Nama Lengkap kedua murid untuk mengaktifkan identitas tim berpasangan (<em>Pair Programming</em>).
-              </p>
+              ` : `
+                <button id="btn-guide-start" type="button" class="game-btn game-btn-gold" style="min-height: 42px; font-size: 11.5px; font-family: var(--font-pixel); padding: 8px 16px;">
+                  ${renderPixelIcon('play', 12, '#ffffff')} ${this.session ? 'Lanjutkan ke Peta' : 'Mulai Pendaftaran'}
+                </button>
+                <div class="guide-nav-group-secondary">
+                  <button id="btn-guide-materi" type="button" class="game-btn game-btn-primary" style="min-height: 42px; font-size: 12px;">
+                    ${renderPixelIcon('book', 13, '#ffffff')} Pelajari Materi
+                  </button>
+                  <button id="btn-guide-tracing" type="button" class="game-btn game-btn-secondary" style="min-height: 42px; font-size: 12px;">
+                    ${renderPixelIcon('flask', 13, 'var(--primary)')} Buka Lab Telusur
+                  </button>
+                </div>
+              `}
             </div>
           </div>
-
-          <!-- Langkah 2 -->
-          <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
-            <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              02
-            </div>
-            <div style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
-                  Orientasi Masalah bersama Guru Pak Budi
-                </h3>
-                <span style="font-size: 9.5px; font-weight: 600; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Dialog / Peta</span>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
-                Masuki <strong>Peta Kota</strong> dan temui Guru Pak Budi di ujung kiri jalan untuk mendengarkan kronologi gangguan otomasi Kota Harmoni serta menyelesaikan tantangan nalar awal sebagai syarat pembuka ruang kelas materi.
-              </p>
-            </div>
-          </div>
-
-          <!-- Langkah 3 -->
-          <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
-            <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--primary); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              03
-            </div>
-            <div style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
-                  Bedah Konsep &amp; Uji Simulator di Ruang Kelas
-                </h3>
-                <span style="font-size: 9.5px; font-weight: 600; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Materi</span>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
-                Pelajari aturan percabangan logika di tab <strong>Materi</strong>, amati bagan alur (<em>flowchart</em>), dan buktikan kondisi pada simulator interaktif hingga menekan tombol konfirmasi lanjut ke lab komputer.
-              </p>
-            </div>
-          </div>
-
-          <!-- Langkah 4 -->
-          <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
-            <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--warning-dark); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              04
-            </div>
-            <div style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
-                  Tebak Alur &amp; Raih 2 Bintang di Lab Telusur
-                </h3>
-                <span style="font-size: 9.5px; font-weight: 600; color: var(--warning-dark); background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(217, 119, 6, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Telusur</span>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
-                Tentukan tebakan alur (<em>Benar</em> atau <em>Salah</em>) sebelum menjalankan simulasi baris demi baris di tab <strong>Telusur</strong>. Uji seluruh cabang kondisi (IF dan ELSE) hingga meraih <strong>Bintang 2 (100% Teruji)</strong> untuk membuka arena tantangan.
-              </p>
-            </div>
-          </div>
-
-          <!-- Langkah 5 -->
-          <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
-            <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--danger); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              05
-            </div>
-            <div style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
-                  Taklukkan Bug Monster di Arena Tantangan
-                </h3>
-                <span style="font-size: 9.5px; font-weight: 600; color: var(--danger); background: rgba(220, 38, 38, 0.08); border: 1px solid rgba(220, 38, 38, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Tantangan</span>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
-                Hadapi Bug Monster yang menginfeksi sistem di tab <strong>Tantangan</strong> (Taman Kota). Analisis nilai variabel saat giliran bertarung dan luncurkan serangan logika yang tepat untuk mengeliminasi bug.
-              </p>
-            </div>
-          </div>
-
-          <!-- Langkah 6 -->
-          <div class="guide-step-row" style="display: flex; gap: 14px; align-items: flex-start; padding: 12px 14px; background: var(--surface-panel-alt); border: 1px solid rgba(28, 25, 23, 0.06); border-radius: 8px;">
-            <div class="guide-step-badge" style="width: 32px; height: 32px; border-radius: 6px; background-color: var(--success); color: #ffffff; display: flex; align-items: center; justify-content: center; font-family: var(--font-code); font-size: 12px; font-weight: 700; flex-shrink: 0;">
-              06
-            </div>
-            <div style="flex: 1;">
-              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                <h3 style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin: 0;">
-                  Evaluasi Reflektif &amp; Kirim Rekap ke Guru
-                </h3>
-                <span style="font-size: 9.5px; font-weight: 600; color: var(--success); background: rgba(21, 128, 61, 0.08); border: 1px solid rgba(21, 128, 61, 0.2); padding: 2px 6px; border-radius: 4px;">Tab Evaluasi &amp; Progres</span>
-              </div>
-              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin: 4px 0 0;">
-                Jawab butir evaluasi formatif mandiri di tab <strong>Evaluasi</strong>, periksa perolehan lencana di tab <strong>Progres</strong>, kirimkan rekap capaian tim ke <strong>Google Drive Guru</strong> (atau simpan CSV), serta salin simpulan ke LKPD kertas fisik.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 4. Tombol Aksi Cepat / Konfirmasi Panduan -->
-      <div class="tactile-card" style="padding: 24px 22px; text-align: center; border: 1px solid ${!hasReadGuide ? 'rgba(15, 118, 110, 0.3)' : 'var(--border-subtle)'}; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 8px -2px rgba(15, 118, 110, 0.06), 0 1px 3px rgba(28, 25, 23, 0.03);">
-        <div style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: rgba(15, 118, 110, 0.08); margin-bottom: 10px; border: 1px solid rgba(15, 118, 110, 0.25);">
-          ${renderPixelIcon(hasReadGuide ? 'check' : 'book', 22, 'var(--primary)')}
-        </div>
-        <h2 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
-          ${!hasReadGuide ? 'Sudah Memahami Cara Bermain?' : 'Siap Memulai Penelusuran Logika?'}
-        </h2>
-        <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 16px; max-width: 520px; margin-left: auto; margin-right: auto; line-height: 1.55;">
-          ${!hasReadGuide
-        ? 'Setelah membaca seluruh panduan dan memahami aturan kolaborasi berpasangan di atas, klik tombol di bawah untuk membuka formulir pendaftaran tim.'
-        : 'Kalian telah menuntaskan panduan! Pilihlah salah satu menu di bawah untuk melanjutkan petualangan bersama rekan belajar tim.'
-      }
-        </p>
-
-        <div class="guide-nav-bar">
-          ${!hasReadGuide ? `
-            <button id="btn-complete-guide" type="button" class="game-btn game-btn-gold" style="min-height: 46px; font-size: 12px; font-family: var(--font-pixel); width: 100%; max-width: 440px; gap: 8px;">
-              ${renderPixelIcon('check', 13, '#ffffff')} Saya Paham Panduan, Daftarkan Tim ${renderPixelIcon('arrow-right', 12, '#ffffff')}
-            </button>
-          ` : `
-            <button id="btn-guide-start" type="button" class="game-btn game-btn-gold" style="min-height: 42px; font-size: 11.5px; font-family: var(--font-pixel); padding: 8px 16px;">
-              ${renderPixelIcon('play', 12, '#ffffff')} ${this.session ? 'Lanjutkan ke Peta' : 'Mulai Pendaftaran'}
-            </button>
-            <div class="guide-nav-group-secondary">
-              <button id="btn-guide-materi" type="button" class="game-btn game-btn-primary" style="min-height: 42px; font-size: 12px;">
-                ${renderPixelIcon('book', 13, '#ffffff')} Pelajari Materi
-              </button>
-              <button id="btn-guide-tracing" type="button" class="game-btn game-btn-secondary" style="min-height: 42px; font-size: 12px;">
-                ${renderPixelIcon('flask', 13, 'var(--primary)')} Buka Lab Telusur
-              </button>
-            </div>
-          `}
         </div>
       </div>
     `;
 
-    // Event Listeners Tombol Aksi
+    // Interaktivitas Accordion Progressive Disclosure Stack
+    const stackCards = [
+      container.querySelector<HTMLElement>('#guide-stack-card-1'),
+      container.querySelector<HTMLElement>('#guide-stack-card-2'),
+      container.querySelector<HTMLElement>('#guide-stack-card-3')
+    ];
+    const stackBodies = [
+      container.querySelector<HTMLElement>('#guide-stack-body-1'),
+      container.querySelector<HTMLElement>('#guide-stack-body-2'),
+      container.querySelector<HTMLElement>('#guide-stack-body-3')
+    ];
+    const stackBadges = [
+      container.querySelector<HTMLElement>('#guide-stack-badge-1'),
+      container.querySelector<HTMLElement>('#guide-stack-badge-2'),
+      container.querySelector<HTMLElement>('#guide-stack-badge-3')
+    ];
+    const stackChevrons = [
+      container.querySelector<HTMLElement>('#guide-stack-chevron-1'),
+      container.querySelector<HTMLElement>('#guide-stack-chevron-2'),
+      container.querySelector<HTMLElement>('#guide-stack-chevron-3')
+    ];
+    const stepperPills = [
+      container.querySelector<HTMLButtonElement>('#guide-stepper-pill-1'),
+      container.querySelector<HTMLButtonElement>('#guide-stepper-pill-2'),
+      container.querySelector<HTMLButtonElement>('#guide-stepper-pill-3')
+    ];
+    const progressFill = container.querySelector<HTMLElement>('#guide-progress-fill');
+    const progressText = container.querySelector<HTMLElement>('#guide-progress-text');
+
+    const updateStackViews = (targetStack: 1 | 2 | 3, shouldScroll = false) => {
+      this.activeGuideStack = targetStack;
+      const isComplete = this.maxUnlockedGuideStack === 3 && hasReadGuide;
+
+      // Update Stepper Bar
+      const percent = isComplete ? 100 : Math.round((this.activeGuideStack / 3) * 100);
+      if (progressFill) progressFill.style.width = `${percent}%`;
+      if (progressText) {
+        progressText.textContent = isComplete
+          ? 'Panduan Lengkap (100% Siap)'
+          : `Tahap ${this.activeGuideStack} dari 3 • ${percent}% Dibaca`;
+      }
+
+      for (let i = 1; i <= 3; i++) {
+        const idx = i - 1;
+        const card = stackCards[idx];
+        const body = stackBodies[idx];
+        const badge = stackBadges[idx];
+        const chevron = stackChevrons[idx];
+        const pill = stepperPills[idx];
+
+        if (!card || !body || !badge || !chevron || !pill) continue;
+
+        const isUnlocked = i <= this.maxUnlockedGuideStack || hasReadGuide;
+        const isOpen = i === this.activeGuideStack;
+        const isCompleted = (i < this.maxUnlockedGuideStack) || hasReadGuide;
+
+        // Card classes
+        card.classList.toggle('active', isOpen);
+        card.classList.toggle('locked', !isUnlocked);
+        card.classList.toggle('completed', isCompleted && !isOpen);
+
+        // Body display
+        body.style.display = isOpen ? 'block' : 'none';
+
+        // Chevron
+        chevron.classList.toggle('expanded', isOpen);
+
+        // Badge
+        if (!isUnlocked) {
+          badge.innerHTML = `${renderPixelIcon('lock', 10, 'var(--text-muted)')} <span style="font-size: 10px; color: var(--text-muted); font-weight: 700;">Terkunci</span>`;
+          badge.style.borderColor = 'rgba(28, 25, 23, 0.15)';
+          badge.style.background = 'rgba(0, 0, 0, 0.04)';
+          badge.style.color = 'var(--text-muted)';
+        } else if (isOpen) {
+          badge.innerHTML = `<span style="width: 5px; height: 5px; border-radius: 50%; background: var(--primary);"></span> <span style="font-size: 10px; color: var(--primary); font-weight: 700;">Sedang Dibaca</span>`;
+          badge.style.borderColor = 'rgba(15, 118, 110, 0.25)';
+          badge.style.background = 'rgba(15, 118, 110, 0.08)';
+          badge.style.color = 'var(--primary)';
+        } else {
+          badge.innerHTML = `${renderPixelIcon('check', 10, 'var(--success)')} <span style="font-size: 10px; color: var(--success); font-weight: 700;">Selesai Dibaca</span>`;
+          badge.style.borderColor = 'rgba(21, 128, 61, 0.25)';
+          badge.style.background = 'rgba(21, 128, 61, 0.08)';
+          badge.style.color = 'var(--success)';
+        }
+
+        // Stepper Pill
+        pill.className = `guide-stepper-pill ${isOpen ? 'active' : (isCompleted ? 'completed' : (isUnlocked ? '' : 'locked'))}`;
+      }
+
+      if (shouldScroll) {
+        const activeCard = stackCards[targetStack - 1];
+        if (activeCard) {
+          activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    };
+
+    // Handler klik Header Stack & Pill Navigasi
+    for (let i = 1; i <= 3; i++) {
+      const idx = i - 1;
+      const headerBtn = container.querySelector<HTMLButtonElement>(`#guide-stack-header-${i}`);
+      const pill = stepperPills[idx];
+
+      const handleStepClick = () => {
+        const isUnlocked = i <= this.maxUnlockedGuideStack || hasReadGuide;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          this.showRetroToast(`Selesaikan dan pahami Tahap ${i - 1} terlebih dahulu.`, false);
+          const c = stackCards[idx];
+          if (c) {
+            c.classList.add('shake');
+            setTimeout(() => c.classList.remove('shake'), 400);
+          }
+          return;
+        }
+        soundFx.playButtonBlip();
+        updateStackViews(i as 1 | 2 | 3, true);
+      };
+
+      headerBtn?.addEventListener('click', handleStepClick);
+      pill?.addEventListener('click', handleStepClick);
+    }
+
+    // Tombol Lanjut ke Tahap 2
+    container.querySelector<HTMLButtonElement>('#btn-advance-stack-1')?.addEventListener('click', () => {
+      soundFx.playBranchSuccessChime();
+      this.maxUnlockedGuideStack = Math.max(this.maxUnlockedGuideStack, 2) as 1 | 2 | 3;
+      updateStackViews(2, true);
+    });
+
+    // Tombol Lanjut ke Tahap 3
+    container.querySelector<HTMLButtonElement>('#btn-advance-stack-2')?.addEventListener('click', () => {
+      soundFx.playBranchSuccessChime();
+      this.maxUnlockedGuideStack = Math.max(this.maxUnlockedGuideStack, 3) as 1 | 2 | 3;
+      updateStackViews(3, true);
+    });
+
+    // Event Listeners Tombol Aksi Konfirmasi Final
     container.querySelector<HTMLButtonElement>('#btn-complete-guide')?.addEventListener('click', async () => {
       soundFx.playLogicTrue();
       this.progressionState = await StorageService.saveProgressionState({ stepGuideCompleted: true });
-      this.showRetroToast('Panduan berhasil dipahami! Langkah pendaftaran tim kini dibuka.', true);
+      this.showRetroToast('Panduan berhasil dipahami! Langkah pendaftaran profil murid kini dibuka.', true);
       this.showOnboardingModal();
     });
 
@@ -1656,12 +1943,12 @@ export class UIManager {
     return container;
   }
 
-  // Modal Registrasi Pasangan Pair Programming
+  // Modal Registrasi Profil Murid (Mode Mandiri)
   private showOnboardingModal(): void {
     const hasReadGuide = !!(this.progressionState?.stepGuideCompleted || this.progressionState?.teacherBypassMode || this.session);
     if (!hasReadGuide) {
       soundFx.playLogicFalse();
-      this.showRetroToast('Kalian wajib membaca Panduan Petualangan terlebih dahulu sebelum mendaftar!', false);
+      this.showRetroToast('Kamu wajib membaca Panduan Petualangan terlebih dahulu sebelum mendaftar!', false);
       this.setScreen('PANDUAN');
       return;
     }
@@ -1693,50 +1980,35 @@ export class UIManager {
     modalContent.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 2px solid var(--border-retro); padding-bottom: 8px;">
         <span class="eyebrow-label" style="font-size: 11px; color: var(--primary);">
-          ${renderPixelIcon('shield', 13, 'var(--primary)')} Registrasi Tim Belajar
+          ${renderPixelIcon('shield', 13, 'var(--primary)')} Registrasi Penyelidik Logika
         </span>
         <button type="button" class="btn-close-modal" style="background: none; border: 1.5px solid var(--border-retro); border-radius: 4px; padding: 2px 8px; color: var(--text-muted); font-family: var(--font-code); font-size: 12px; cursor: pointer;">Tutup [X]</button>
       </div>
 
       <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
-        Masukkan nama lengkap dan nomor absen kedua anggota tim untuk merekam portofolio pembelajaran di LKPD.
+        Masukkan nama lengkap dan nomor absen kamu (1–46) untuk merekam portofolio pembelajaran mandiri di aplikasi iobranch.
       </p>
 
       <form id="form-onboarding" style="display: flex; flex-direction: column; gap: 12px;">
-        <div style="display: grid; grid-template-columns: 1fr 80px; gap: 8px;">
+        <div style="display: grid; grid-template-columns: 1fr 88px; gap: 8px;">
           <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
-              Nama Lengkap Murid 1:
+            <label for="input-student-name" style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
+              Nama Lengkap Murid:
             </label>
-            <input id="input-s1-name" type="text" maxlength="50" class="pixel-input" placeholder="Nama Lengkap Murid 1" required style="width: 100%; min-height: 44px;" />
+            <input id="input-student-name" type="text" maxlength="50" class="pixel-input" placeholder="Nama Lengkap Kamu" required style="width: 100%; min-height: 44px;" autocomplete="name" />
           </div>
           <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
-              Absen:
+            <label for="input-student-absen" style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
+              No. Absen:
             </label>
-            <input id="input-s1-absen" type="number" min="1" max="46" class="pixel-input" placeholder="No" required style="width: 100%; min-height: 44px;" />
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 80px; gap: 8px;">
-          <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
-              Nama Lengkap Murid 2:
-            </label>
-            <input id="input-s2-name" type="text" maxlength="50" class="pixel-input" placeholder="Nama Lengkap Murid 2" required style="width: 100%; min-height: 44px;" />
-          </div>
-          <div>
-            <label style="display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--text-primary);">
-              Absen:
-            </label>
-            <input id="input-s2-absen" type="number" min="1" max="46" class="pixel-input" placeholder="No" required style="width: 100%; min-height: 44px;" />
+            <input id="input-student-absen" type="number" min="1" max="46" class="pixel-input" placeholder="1-46" required style="width: 100%; min-height: 44px;" inputmode="numeric" />
           </div>
         </div>
 
         <div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <label style="font-size: 11px; font-weight: 600; color: var(--text-primary); margin: 0;">
-              Pilih Lambang Tim (16-Bit Pixel Art):
+              Pilih Simbol Avatar (16-Bit Pixel Art):
             </label>
             <span id="selected-team-concept" style="font-size: 10px; font-weight: 600; color: var(--primary);">
               Logika Percabangan
@@ -1805,34 +2077,27 @@ export class UIManager {
     const form = modalContent.querySelector<HTMLFormElement>('#form-onboarding');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const s1Name = (modalContent.querySelector('#input-s1-name') as HTMLInputElement).value.trim();
-      const s1Absen = parseInt((modalContent.querySelector('#input-s1-absen') as HTMLInputElement).value, 10) || 1;
-      const s2Name = (modalContent.querySelector('#input-s2-name') as HTMLInputElement).value.trim();
-      const s2Absen = parseInt((modalContent.querySelector('#input-s2-absen') as HTMLInputElement).value, 10) || 2;
+      const studentName = (modalContent.querySelector('#input-student-name') as HTMLInputElement).value.trim();
+      const studentAbsen = parseInt((modalContent.querySelector('#input-student-absen') as HTMLInputElement).value, 10);
 
-      if (s1Name.length < 2 || s2Name.length < 2) {
+      if (studentName.length < 2) {
         soundFx.playLogicFalse();
-        this.showRetroToast('Nama lengkap kedua murid minimal 2 karakter!', false);
+        this.showRetroToast('Nama lengkap murid minimal 2 karakter!', false);
         return;
       }
-      if (s1Name.length > 50 || s2Name.length > 50) {
+      if (studentName.length > 50) {
         soundFx.playLogicFalse();
         this.showRetroToast('Nama murid maksimal 50 karakter!', false);
         return;
       }
-      if (!isValidSafeName(s1Name) || !isValidSafeName(s2Name)) {
+      if (!isValidSafeName(studentName)) {
         soundFx.playLogicFalse();
         this.showRetroToast('Nama murid mengandung karakter tidak diizinkan!', false);
         return;
       }
-      if (s1Absen < 1 || s1Absen > 46 || s2Absen < 1 || s2Absen > 46 || Number.isNaN(s1Absen) || Number.isNaN(s2Absen)) {
+      if (isNaN(studentAbsen) || studentAbsen < 1 || studentAbsen > 46) {
         soundFx.playLogicFalse();
         this.showRetroToast('Nomor absen harus berada dalam rentang 1 sampai 46!', false);
-        return;
-      }
-      if (s1Absen === s2Absen) {
-        soundFx.playLogicFalse();
-        this.showRetroToast('Nomor absen Murid 1 dan Murid 2 tidak boleh sama!', false);
         return;
       }
 
@@ -1840,15 +2105,17 @@ export class UIManager {
       if (submitBtn) submitBtn.disabled = true;
 
       const symbol = ((modalContent.querySelector('input[name="symbol"]:checked') as HTMLInputElement)?.value || 'algoritma') as TeamSymbol;
-
-      const autoPairId = `Tim Absen ${String(s1Absen).padStart(2, '0')}-${String(s2Absen).padStart(2, '0')}`;
+      const studentIdStr = `Absen ${String(studentAbsen).padStart(2, '0')}`;
 
       const newSession: StudentSession = {
-        pairId: autoPairId,
-        student1Name: s1Name,
-        student1Absen: s1Absen,
-        student2Name: s2Name,
-        student2Absen: s2Absen,
+        studentName,
+        studentAbsen,
+        studentId: `${studentIdStr} - ${studentName}`,
+        pairId: studentIdStr,
+        student1Name: studentName,
+        student1Absen: studentAbsen,
+        student2Name: '-',
+        student2Absen: 0,
         teamSymbol: symbol,
         totalXp: 0,
         currentLevel: 1,
@@ -1861,7 +2128,7 @@ export class UIManager {
         this.progressionState = await StorageService.getProgressionState();
         soundFx.playLogicTrue();
         closeModal();
-        this.showRetroToast(`Pendaftaran berhasil! Selamat bergabung di Kota Harmoni, ${autoPairId}. Temui Pak Budi di SMA Harmoni!`, true);
+        this.showRetroToast(`Pendaftaran berhasil! Selamat datang, ${studentName} (${studentIdStr}). Temui Guru Pak Budi di SMA Harmoni!`, true);
         this.setScreen('OVERWORLD');
       } finally {
         if (submitBtn) submitBtn.disabled = false;
@@ -1888,7 +2155,7 @@ export class UIManager {
     const isBattleUnlocked = this.isScreenUnlocked('BATTLE');
     const isEvaluasiUnlocked = this.isScreenUnlocked('EVALUASI');
 
-    // Tentukan Misi Utama Aktif Tim Berdasarkan Kemajuan Nyata
+    // Tentukan Misi Utama Aktif Murid Berdasarkan Kemajuan Nyata
     let activeStepNum = '01';
     let activeMissionTitle = 'Orientasi Masalah bersama Guru Pak Budi';
     let activeLocation = 'Ujung Kiri Jalan • Di Antara Pepohonan';
@@ -1935,7 +2202,7 @@ export class UIManager {
       activeStepNum = '02';
       activeMissionTitle = 'Uji Cabang Kode di Lab Telusur';
       activeLocation = 'Gedung Laboratorium Komputer';
-      activeDesc = 'Kalian telah memahami materi percabangan! Sekarang masuki Lab Telusur Kode, uji nilai variabel, dan buktikan semua jalur kondisi (cabang IF dan ELSE) untuk membuka arena tantangan.';
+      activeDesc = 'Kamu telah memahami materi percabangan! Sekarang masuki Lab Telusur Kode, uji nilai variabel, dan buktikan semua jalur kondisi (cabang IF dan ELSE) untuk membuka arena tantangan.';
       primaryBtnLabel = 'Masuk Lab Telusur Kode';
       primaryBtnIcon = 'flask';
       primaryBtnScreen = 'TRACING';
@@ -1953,10 +2220,10 @@ export class UIManager {
       secondaryBtnScreen = 'BATTLE';
     } else if (!this.progressionState?.stepEvaluationCompleted) {
       activeStepNum = '04';
-      activeMissionTitle = 'Selesaikan Evaluasi & Refleksi LKPD';
+      activeMissionTitle = 'Selesaikan Evaluasi Pemahaman Formatif';
       activeLocation = 'Gedung Perpustakaan Kota';
-      activeDesc = 'Bug Monster berhasil dikalahkan! Masuki Perpustakaan untuk menuntaskan evaluasi mandiri dan refleksi belajar tim.';
-      primaryBtnLabel = 'Buka Ruang Evaluasi LKPD';
+      activeDesc = 'Bug Monster berhasil dikalahkan! Masuki Perpustakaan untuk menuntaskan kuis evaluasi pemahaman formatif.';
+      primaryBtnLabel = 'Buka Ruang Evaluasi Formatif';
       primaryBtnIcon = 'document';
       primaryBtnScreen = 'EVALUASI';
       secondaryBtnLabel = '';
@@ -1965,8 +2232,8 @@ export class UIManager {
       activeStepNum = '05';
       activeMissionTitle = 'Misi Kota Harmoni Selesai dengan Gemilang!';
       activeLocation = 'Balai Kota & Arsip Capaian';
-      activeDesc = 'Seluruh langkah pembelajaran telah kalian tuntaskan bersama pasangan tim! Buka menu Progres untuk melihat nilai formatif, lencana tim, dan mengekspor bukti laporan belajar.';
-      primaryBtnLabel = 'Lihat Rekap Capaian Tim';
+      activeDesc = 'Seluruh langkah pembelajaran telah kamu tuntaskan dengan gemilang! Buka menu Progres untuk melihat nilai formatif, lencana capaian, dan mengekspor bukti laporan belajar.';
+      primaryBtnLabel = 'Lihat Rekap Capaian';
       primaryBtnIcon = 'trophy';
       primaryBtnScreen = 'PROGRES';
       secondaryBtnLabel = '';
@@ -2015,7 +2282,7 @@ export class UIManager {
             ${renderPixelIcon('bolt', 11, 'var(--primary)')} PINTASAN INSTAN
           </div>
           <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 0;">
-            Kalian juga bisa <strong style="color: var(--text-primary); font-weight: 600;">mengetuk pin gedung</strong> pada kanvas peta atau menekan tombol aksi pada papan misi di bawah.
+            Kamu juga bisa <strong style="color: var(--text-primary); font-weight: 600;">mengetuk pin gedung</strong> pada kanvas peta atau menekan tombol aksi pada papan misi di bawah.
           </p>
         </div>
       </div>
@@ -2029,7 +2296,7 @@ export class UIManager {
     questCard.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
         <span class="badge-pill" style="font-size: 11px; color: var(--primary); font-weight: 700; letter-spacing: 0.3px;">
-          ${renderPixelIcon('target', 12, 'var(--primary)')} MISI AKTIF TIM • LANGKAH ${activeStepNum}
+          ${renderPixelIcon('target', 12, 'var(--primary)')} MISI AKTIF • LANGKAH ${activeStepNum}
         </span>
       </div>
       <div style="font-family: var(--font-ui); font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 8px 0 6px; line-height: 1.4;">
@@ -2180,7 +2447,7 @@ export class UIManager {
             </div>
             <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px;">
               ${isBattleUnlocked
-        ? 'Tantang Bug Monster dengan keputusan logika yang tepat untuk meningkatkan skor tantangan tim.'
+        ? 'Tantang Bug Monster dengan keputusan logika yang tepat untuk meningkatkan skor tantangan kamu.'
         : 'Buktikan minimal satu cabang kondisi di Lab Telusur untuk membuka gerbang pertempuran.'
       }
             </p>
@@ -2201,7 +2468,7 @@ export class UIManager {
               ${renderPixelIcon('document', 14, isEvaluasiUnlocked ? 'var(--primary)' : 'var(--text-muted)')}
             </div>
             <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
-              Ruang Evaluasi LKPD
+              Ruang Evaluasi Pemahaman
             </div>
             <div style="margin-bottom: 8px;">
               ${isEvaluasiUnlocked ? `
@@ -2217,7 +2484,7 @@ export class UIManager {
             </div>
             <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 10px;">
               ${isEvaluasiUnlocked
-        ? 'Selesaikan soal formatif mandiri dan lengkapi refleksi kelompok pada LKPD kertas.'
+        ? 'Selesaikan soal formatif mandiri untuk menguji penguasaan konsep logikamu.'
         : 'Kalahkan Bug Monster di Arena terlebih dahulu sebelum mengisi evaluasi reflektif.'
       }
             </p>
@@ -2262,6 +2529,7 @@ export class UIManager {
   // Layar 03: Dialog Penuh Karakter Pak Budi (Scenic Character Dialogue & Problem Orientation)
   // =================================================================
   private renderScreenDialog(): HTMLElement {
+    const hasCompletedDialogBefore = Boolean(this.progressionState?.stepDialogCompleted);
     // Tandai dialog dengan Pak Budi telah diselesaikan / dibuka
     if (this.progressionState && !this.progressionState.stepDialogCompleted) {
       this.progressionState.stepDialogCompleted = true;
@@ -2269,9 +2537,12 @@ export class UIManager {
     }
 
     const isTracingUnlocked = this.isScreenUnlocked('TRACING');
-    const pairName = this.session?.pairId || 'Penyelidik Logika';
-    const student1Name = this.session?.student1Name || 'Murid 1';
-    const student2Name = this.session?.student2Name || 'Murid 2';
+    if (hasCompletedDialogBefore || isTracingUnlocked) {
+      this.maxUnlockedDialogStack = 3;
+    }
+
+    const studentDisplayName = this.session?.studentName || this.session?.student1Name || 'Penyelidik Logika';
+    const studentAbsenDisplay = this.session?.studentAbsen ? `Absen ${String(this.session.studentAbsen).padStart(2, '0')}` : (this.session?.pairId || '-');
 
     const card = document.createElement('div');
     card.className = 'tactile-card';
@@ -2292,79 +2563,165 @@ export class UIManager {
         </span>
       </div>
 
-      <!-- Banner Sambutan Tim Penyelidik Berpasangan -->
-      <div style="background: rgba(15, 118, 110, 0.04); border: 1px solid rgba(15, 118, 110, 0.16); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <!-- Banner Sambutan Penyelidik Logika Mandiri -->
+      <div style="background: rgba(15, 118, 110, 0.04); border: 1px solid rgba(15, 118, 110, 0.16); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="width: 32px; height: 32px; border-radius: 8px; background: #ffffff; border: 1px solid rgba(15, 118, 110, 0.2); display: flex; align-items: center; justify-content: center;">
             ${renderPixelIcon('chat', 16, 'var(--primary)')}
           </div>
           <div>
             <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
-              Sesi Pembimbingan: ${escapeHtml(pairName)}
+              Sesi Orientasi Masalah: ${escapeHtml(studentDisplayName)}
             </div>
             <div style="font-size: 11.5px; color: var(--text-secondary);">
-              Kolaborasi Penyelidik: <strong style="color: var(--primary); font-weight: 600;">${escapeHtml(student1Name)}</strong> &amp; <strong style="color: var(--primary); font-weight: 600;">${escapeHtml(student2Name)}</strong>
+              Penyelidik Logika: <strong style="color: var(--primary); font-weight: 600;">${escapeHtml(studentDisplayName)}</strong> (${escapeHtml(studentAbsenDisplay)})
             </div>
           </div>
+        </div>
+        <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: var(--primary); background: #ffffff; padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(15, 118, 110, 0.25);">
+          ${renderPixelIcon('bulb', 11, 'var(--primary)')}
+          Fase 1 PBL: Orientasi Masalah
+        </span>
+      </div>
+
+      <!-- Bilah Stepper Progres Dialog Bertahap -->
+      <div class="dialog-stepper-box" style="margin-bottom: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <span style="font-family: var(--font-code); font-size: 11px; font-weight: 700; color: var(--primary); display: inline-flex; align-items: center; gap: 6px;">
+            ${renderPixelIcon('target', 12, 'var(--primary)')} Tahapan Orientasi Masalah
+          </span>
+          <span id="dialog-progress-text" style="font-family: var(--font-code); font-size: 10.5px; font-weight: 700; color: var(--text-secondary);">
+            Tahap ${this.activeDialogStack} dari 3 • ${hasCompletedDialogBefore || this.maxUnlockedDialogStack === 3 ? '100% Siap' : `${Math.round((this.activeDialogStack / 3) * 100)}% Dipahami`}
+          </span>
+        </div>
+        <div class="dialog-progress-track">
+          <div id="dialog-progress-fill" class="dialog-progress-fill" style="width: ${hasCompletedDialogBefore || this.maxUnlockedDialogStack === 3 ? '100%' : `${(this.activeDialogStack / 3) * 100}%`};"></div>
+        </div>
+        <div class="dialog-stepper-pills">
+          <button id="dialog-stepper-pill-1" type="button" class="dialog-stepper-pill ${this.activeDialogStack === 1 ? 'active' : (this.maxUnlockedDialogStack >= 2 ? 'completed' : '')}">
+            ${renderPixelIcon('chat', 12, 'currentColor')} <span>1. Arahan Guru</span>
+          </button>
+          <button id="dialog-stepper-pill-2" type="button" class="dialog-stepper-pill ${this.activeDialogStack === 2 ? 'active' : (this.maxUnlockedDialogStack >= 3 ? 'completed' : (this.maxUnlockedDialogStack < 2 && !hasCompletedDialogBefore ? 'locked' : ''))}">
+            ${renderPixelIcon(this.maxUnlockedDialogStack >= 2 || hasCompletedDialogBefore ? 'document' : 'lock', 12, 'currentColor')} <span>2. 5 Titik Krisis</span>
+          </button>
+          <button id="dialog-stepper-pill-3" type="button" class="dialog-stepper-pill ${this.activeDialogStack === 3 ? 'active' : (this.maxUnlockedDialogStack >= 3 ? (hasCompletedDialogBefore ? 'completed' : '') : (hasCompletedDialogBefore ? '' : 'locked'))}">
+            ${renderPixelIcon(this.maxUnlockedDialogStack >= 3 || hasCompletedDialogBefore ? 'flask' : 'lock', 12, 'currentColor')} <span>3. Uji Nalar & Misi</span>
+          </button>
         </div>
       </div>
 
-      <!-- Panggung Dialog & Berkas Investigasi Karakter -->
-      <div style="display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap;">
-        <!-- Kolom Kiri: Potret & Profil Guru Pak Budi -->
-        <div style="text-align: center; width: 170px; flex-shrink: 0; margin: 0 auto;">
-          <img src="/assets/images/pak_budi_portrait.jpg" alt="Pak Budi" style="
-            width: 140px;
-            height: 140px;
-            border-radius: 12px;
-            border: 1px solid var(--border-subtle);
-            box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
-            object-fit: cover;
-            display: block;
-            margin: 0 auto;
-          " />
-          <h3 style="font-family: var(--font-pixel); font-size: 12px; color: var(--primary); margin-top: 12px; margin-bottom: 3px;">
-            Pak Budi
-          </h3>
-          <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 0;">
-            Guru Informatika SMA
-          </p>
-        </div>
+      <!-- STACK CONTAINER -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
 
-        <!-- Kolom Kanan: Narasi Krisis Kasus & Interaktivitas Nalar -->
-        <div style="flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 14px;">
-          <!-- Kotak Dialog Utama Pak Budi -->
-          <div style="
-            background-color: var(--surface-panel-alt);
-            border: 1px solid var(--border-subtle);
-            border-radius: 12px;
-            padding: 16px 18px;
-            position: relative;
-          ">
-            <div style="font-family: var(--font-pixel); font-size: 9.5px; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-              ${renderPixelIcon('chat', 11, 'var(--primary)')} Arahan Orientasi Masalah:
+        <!-- STACK 1: Arahan Karakter Guru Pak Budi -->
+        <div id="dialog-stack-card-1" class="dialog-stack-card active">
+          <button id="dialog-stack-header-1" type="button" class="dialog-stack-header" aria-expanded="true">
+            <div class="dialog-stack-title-box">
+              <div class="dialog-stack-num-badge">01</div>
+              <div>
+                <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                  Arahan Orientasi Masalah: Krisis Kota Harmoni
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                  Penyambutan dan penjelasan dasar logika dari Guru Pak Budi
+                </div>
+              </div>
             </div>
-            <p style="font-size: 13.5px; line-height: 1.65; color: var(--text-primary); margin-bottom: 8px;">
-              "Selamat datang di Kota Harmoni, rekan-rekan ${pairName}! Kota kita sedang menghadapi kendala otomasi. Sejumlah fasilitas cerdas mengalami gangguan fungsi karena program komputernya salah mengambil keputusan logika."
-            </p>
-            <p style="font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); margin: 0;">
-              "Dalam komputer, keputusan diambil dari evaluasi ekspresi kondisi: bernilai <strong>BENAR (TRUE)</strong> atau <strong>SALAH (FALSE)</strong>. Mari cermati 5 masalah di lapangan berikut ini sebelum memulai penyelidikan!"
-            </p>
-          </div>
-
-          <!-- Ringkasan Kontekstual 5 Masalah Otomasi Kota Harmoni -->
-          <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px; background: #ffffff;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 6px;">
-              <span style="font-family: var(--font-ui); font-size: 12.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
-                ${renderPixelIcon('document', 13, 'var(--primary)')} Ringkasan Masalah Otomasi Kota
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="dialog-stack-badge-1" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); border: 1px solid rgba(15, 118, 110, 0.25); background: rgba(15, 118, 110, 0.08); display: inline-flex; align-items: center; gap: 4px;">
+                <span style="width: 5px; height: 5px; border-radius: 50%; background: var(--primary);"></span> Sedang Dibaca
+              </span>
+              <span id="dialog-stack-chevron-1" class="dialog-stack-chevron expanded">
+                ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
               </span>
             </div>
+          </button>
 
-            <p style="font-size: 12.5px; line-height: 1.6; color: var(--text-primary); margin-bottom: 14px;">
+          <div id="dialog-stack-body-1" class="dialog-stack-body">
+            <div style="display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; margin-top: 6px;">
+              <!-- Kolom Potret Pak Budi -->
+              <div style="text-align: center; width: 140px; flex-shrink: 0; margin: 0 auto;">
+                <img src="/assets/images/pak_budi_portrait.jpg" alt="Pak Budi" style="
+                  width: 120px;
+                  height: 120px;
+                  border-radius: 12px;
+                  border: 1px solid var(--border-subtle);
+                  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+                  object-fit: cover;
+                  display: block;
+                  margin: 0 auto;
+                " />
+                <h3 style="font-family: var(--font-pixel); font-size: 12px; color: var(--primary); margin-top: 10px; margin-bottom: 2px;">
+                  Pak Budi
+                </h3>
+                <p style="font-size: 11px; color: var(--text-secondary); margin-bottom: 0;">
+                  Guru Informatika SMA
+                </p>
+              </div>
+
+              <!-- Balon Dialog Utama -->
+              <div style="flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="
+                  background-color: var(--surface-panel-alt);
+                  border: 1px solid var(--border-subtle);
+                  border-radius: 12px;
+                  padding: 16px 18px;
+                ">
+                  <div style="font-family: var(--font-pixel); font-size: 9.5px; color: var(--primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                    ${renderPixelIcon('chat', 11, 'var(--primary)')} Percakapan Lapangan:
+                  </div>
+                  <p style="font-size: 13.5px; line-height: 1.65; color: var(--text-primary); margin-bottom: 8px;">
+                    "Selamat datang di Kota Harmoni, <strong>${escapeHtml(studentDisplayName)}</strong>! Kota kita sedang menghadapi kendala otomasi. Sejumlah fasilitas cerdas mengalami gangguan fungsi karena program komputernya salah mengambil keputusan logika."
+                  </p>
+                  <p style="font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); margin-bottom: 10px;">
+                    "Dalam sistem komputer, keputusan diambil dari evaluasi ekspresi kondisi: bernilai <strong>BENAR (TRUE)</strong> atau <strong>SALAH (FALSE)</strong>. Kesalahan operator atau urutan cabang membuat fasilitas bertindak terbalik!"
+                  </p>
+                  <div style="background: rgba(15, 118, 110, 0.05); border-left: 3px solid var(--primary); padding: 8px 12px; border-radius: 0 6px 6px 0; font-size: 11.5px; color: var(--text-primary); line-height: 1.5;">
+                    <strong style="color: var(--primary);">Misi Investigasi Mandiri:</strong> Tugasmu adalah menelusuri bagaimana kode program mengevaluasi setiap kondisi, menemukan letak bug logika, dan mengembalikan kedamaian fasilitas kota!
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tombol Lanjut ke Stack 2 -->
+            <div class="dialog-advance-btn-box">
+              <button id="btn-dialog-advance-1" type="button" class="game-btn game-btn-primary" style="padding: 10px 18px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;">
+                Paham, Telusuri 5 Titik Krisis Kota ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STACK 2: 5 Titik Malfungsi Fasilitas Kota Harmoni -->
+        <div id="dialog-stack-card-2" class="dialog-stack-card ${this.maxUnlockedDialogStack < 2 && !hasCompletedDialogBefore ? 'locked' : ''}">
+          <button id="dialog-stack-header-2" type="button" class="dialog-stack-header" aria-expanded="false">
+            <div class="dialog-stack-title-box">
+              <div class="dialog-stack-num-badge">02</div>
+              <div>
+                <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                  5 Titik Gangguan Logika Fasilitas Kota
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                  Pemetaan masalah Siklus 1 (Dasar) &amp; Siklus 2 (Lanjutan)
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="dialog-stack-badge-2" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--text-muted); border: 1px solid rgba(28, 25, 23, 0.15); background: rgba(0, 0, 0, 0.04); display: inline-flex; align-items: center; gap: 4px;">
+                ${this.maxUnlockedDialogStack >= 2 || hasCompletedDialogBefore ? `${renderPixelIcon('check', 10, 'var(--success)')} <span style="color: var(--success);">Terbuka</span>` : `${renderPixelIcon('lock', 10, 'var(--text-muted)')} Terkunci`}
+              </span>
+              <span id="dialog-stack-chevron-2" class="dialog-stack-chevron">
+                ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+              </span>
+            </div>
+          </button>
+
+          <div id="dialog-stack-body-2" class="dialog-stack-body" style="display: none;">
+            <p style="font-size: 12.5px; line-height: 1.6; color: var(--text-primary); margin: 6px 0 14px;">
               Di Kota Harmoni, fasilitas umum mengandalkan <strong>percabangan logika</strong> untuk melayani warga secara otomatis. Terdapat 5 masalah otomasi yang diselesaikan bertahap: Masalah 1 sampai 3 pada <strong>Siklus 1 (Dasar)</strong> dan Masalah 4 sampai 5 pada <strong>Siklus 2 (Lanjutan)</strong>:
             </p>
 
-            <!-- Bagian 1: Masalah Siklus 1 (Fasilitas Dasar - Terbuka Penuh) -->
+            <!-- Bagian 1: Masalah Siklus 1 (Fasilitas Dasar) -->
             <div style="margin-bottom: 14px;">
               <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
                 <span style="font-family: var(--font-pixel); font-size: 9px; color: var(--primary); letter-spacing: 0.3px;">
@@ -2429,7 +2786,7 @@ export class UIManager {
               </div>
             </div>
 
-            <!-- Bagian 2: Masalah Siklus 2 (Fasilitas Lanjutan - Terkunci / Terbuka Sesuai Status) -->
+            <!-- Bagian 2: Masalah Siklus 2 (Fasilitas Lanjutan) -->
             <div style="margin-bottom: 12px;">
               <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
                 <span style="font-family: var(--font-pixel); font-size: 9px; color: ${this.isCycle2Unlocked ? 'var(--primary)' : 'var(--warning-dark)'}; letter-spacing: 0.3px;">
@@ -2440,7 +2797,6 @@ export class UIManager {
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px;">
                 <!-- Masalah 4 -->
                 <div style="position: relative; background: ${this.isCycle2Unlocked ? 'var(--surface-panel-alt)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px ${this.isCycle2Unlocked ? 'solid var(--border-subtle)' : 'dashed rgba(217, 119, 6, 0.40)'}; border-radius: 8px; overflow: hidden;">
-                  <!-- Konten kartu (selalu dirender, diblur saat terkunci) -->
                   <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
@@ -2455,7 +2811,6 @@ export class UIManager {
                       Urutan bertingkat batas tinggi (<code style="font-family: var(--font-code); color: var(--primary);">&gt;= 50</code>) sebelum batas sedang (<code style="font-family: var(--font-code); color: var(--primary);">&gt;= 20</code>).
                     </div>
                   </div>
-                  <!-- Overlay kunci (hanya tampil saat terkunci) -->
                   ${this.isCycle2Unlocked ? '' : `
                     <div style="position: absolute; inset: 0; background: rgba(245, 241, 232, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 8px;">
                       <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
@@ -2471,7 +2826,6 @@ export class UIManager {
 
                 <!-- Masalah 5 -->
                 <div style="position: relative; background: ${this.isCycle2Unlocked ? 'var(--surface-panel-alt)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px ${this.isCycle2Unlocked ? 'solid var(--border-subtle)' : 'dashed rgba(217, 119, 6, 0.40)'}; border-radius: 8px; overflow: hidden;">
-                  <!-- Konten kartu (selalu dirender, diblur saat terkunci) -->
                   <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
@@ -2486,7 +2840,6 @@ export class UIManager {
                       Pencocokan nilai diskrit tombol dan blok penampung standar (<code style="font-family: var(--font-code); color: var(--primary);">default</code>).
                     </div>
                   </div>
-                  <!-- Overlay kunci (hanya tampil saat terkunci) -->
                   ${this.isCycle2Unlocked ? '' : `
                     <div style="position: absolute; inset: 0; background: rgba(245, 241, 232, 0.72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: 8px;">
                       <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
@@ -2502,80 +2855,277 @@ export class UIManager {
               </div>
             </div>
 
-            <!-- Catatan Fokus Misi Investigasi Tim -->
-            <div style="font-size: 11.5px; color: var(--text-secondary); background: rgba(15, 118, 110, 0.04); border: 1px solid rgba(15, 118, 110, 0.16); border-radius: 6px; padding: 8px 12px; line-height: 1.5;">
-              <strong style="color: var(--primary);">Misi Investigasi Tim:</strong> Tugas kalian adalah menelusuri bagaimana kode program mengevaluasi setiap kondisi, menemukan letak kekeliruan alur cabang, dan memastikan seluruh kemungkinan skenario teruji hingga tuntas.
-            </div>
-          </div>
-
-          <!-- Uji Nalar Metakognitif Interaktif bersama Pak Budi -->
-          <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px; background: #ffffff;">
-            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-              ${renderPixelIcon('flask', 13, 'var(--primary)')}
-              <span style="font-family: var(--font-pixel); font-size: 9.5px; color: var(--primary);">Tantangan Nalar Awal Tim</span>
-            </div>
-            <p style="font-size: 12.5px; color: var(--text-primary); margin-bottom: 10px; line-height: 1.55;">
-              Mari mulai penyelidikan dari aturan Palang Gerbang Stasiun MRT (Masalah 1): <code style="font-family: var(--font-code); background: var(--surface-panel-alt); padding: 2px 6px; border-radius: 4px; color: var(--primary); font-weight: 600;">JIKA (saldo &gt;= 4000) MAKA Buka Pintu</code>. Jika seorang penumpang menempelkan kartu dengan <strong>saldo Rp2.500</strong>:
-            </p>
-
-            <!-- Opsi Jawaban Uji Hipotesis -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-              <button id="btn-hipotesis-benar" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 12px; min-height: 42px; text-align: center; justify-content: center; border-radius: 8px;">
-                ${renderPixelIcon('lock', 12, 'var(--text-secondary)')} Pintu Tetap Tertutup (FALSE)
-              </button>
-              <button id="btn-hipotesis-salah" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 12px; min-height: 42px; text-align: center; justify-content: center; border-radius: 8px;">
-                ${renderPixelIcon('play', 12, 'var(--text-secondary)')} Pintu Terbuka (TRUE)
+            <!-- Tombol Lanjut ke Stack 3 -->
+            <div class="dialog-advance-btn-box">
+              <button id="btn-dialog-advance-2" type="button" class="game-btn game-btn-primary" style="padding: 10px 18px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;">
+                Paham, Lanjut ke Uji Nalar Awal ${renderPixelIcon('arrow-right', 12, '#ffffff')}
               </button>
             </div>
-
-            <!-- Respon Validasi Interaktif Pak Budi -->
-            <div id="kotak-respon-hipotesis" style="display: none; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.55; transition: all 0.2s ease;"></div>
-          </div>
-
-          <!-- Peta Langkah Penyelidikan (Roadmap) -->
-          <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 16px; background: var(--surface-panel-alt);">
-            <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-              ${renderPixelIcon('map', 13, 'var(--primary)')} Agenda Penyelidikan: ${pairName}
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 11.5px;">
-              <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
-                <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">1</span>
-                <span><strong>Ruang Kelas:</strong> Bedah Konsep &amp; Alur IF</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
-                <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">2</span>
-                <span><strong>Lab Telusur:</strong> Uji Semua Jalur Kondisi</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
-                <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">3</span>
-                <span><strong>Arena Bug:</strong> Tuntaskan Tantangan Logika</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
-                <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">4</span>
-                <span><strong>LKPD Fisik:</strong> Catat Hasil &amp; Refleksi Tim</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Opsi Tombol Aksi Navigasi Utama -->
-          <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px;">
-            <button id="btn-dialog-to-materi" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 46px; text-align: left; justify-content: flex-start; gap: 10px; border-radius: 8px;">
-              ${renderPixelIcon('book', 15, '#ffffff')} Masuk ke Gedung Sekolah (Buka Materi Percabangan)
-            </button>
-            ${isTracingUnlocked ? `
-            <button id="btn-dialog-to-tracing" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; text-align: left; justify-content: flex-start; gap: 10px; border-radius: 8px;">
-              ${renderPixelIcon('flask', 13, 'var(--primary)')} Lanjutkan ke Lab Telusur Kode
-            </button>
-            ` : ''}
-            <button id="btn-dialog-to-overworld" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; text-align: left; justify-content: flex-start; gap: 10px; border-radius: 8px;">
-              ${renderPixelIcon('arrow-left', 14, 'var(--text-secondary)')} Kembali ke Peta
-            </button>
           </div>
         </div>
+
+        <!-- STACK 3: Uji Nalar Metakognitif & Agenda Penyelidikan -->
+        <div id="dialog-stack-card-3" class="dialog-stack-card ${this.maxUnlockedDialogStack < 3 && !hasCompletedDialogBefore ? 'locked' : ''}">
+          <button id="dialog-stack-header-3" type="button" class="dialog-stack-header" aria-expanded="false">
+            <div class="dialog-stack-title-box">
+              <div class="dialog-stack-num-badge">03</div>
+              <div>
+                <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                  Tantangan Nalar Awal &amp; Agenda Penyelidikan
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                  Uji hipotesis kondisi logika dan 4 langkah aksi penyelidikan di kelas
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span id="dialog-stack-badge-3" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--text-muted); border: 1px solid rgba(28, 25, 23, 0.15); background: rgba(0, 0, 0, 0.04); display: inline-flex; align-items: center; gap: 4px;">
+                ${this.maxUnlockedDialogStack >= 3 || hasCompletedDialogBefore ? `${renderPixelIcon('check', 10, 'var(--success)')} <span style="color: var(--success);">Terbuka</span>` : `${renderPixelIcon('lock', 10, 'var(--text-muted)')} Terkunci`}
+              </span>
+              <span id="dialog-stack-chevron-3" class="dialog-stack-chevron">
+                ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+              </span>
+            </div>
+          </button>
+
+          <div id="dialog-stack-body-3" class="dialog-stack-body" style="display: none;">
+            <!-- Uji Nalar Metakognitif Interaktif bersama Pak Budi -->
+            <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px; background: #ffffff; margin-top: 6px; margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+                ${renderPixelIcon('flask', 13, 'var(--primary)')}
+                <span style="font-family: var(--font-pixel); font-size: 9.5px; color: var(--primary);">Tantangan Nalar Awal Penyelidik</span>
+              </div>
+              <p style="font-size: 12.5px; color: var(--text-primary); margin-bottom: 10px; line-height: 1.55;">
+                Mari mulai penyelidikan dari aturan Palang Gerbang Stasiun MRT (Masalah 1): <code style="font-family: var(--font-code); background: var(--surface-panel-alt); padding: 2px 6px; border-radius: 4px; color: var(--primary); font-weight: 600;">JIKA (saldo &gt;= 4000) MAKA Buka Pintu</code>. Jika seorang penumpang menempelkan kartu dengan <strong>saldo Rp2.500</strong>:
+              </p>
+
+              <!-- Opsi Jawaban Uji Hipotesis -->
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                <button id="btn-hipotesis-benar" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 12px; min-height: 42px; text-align: center; justify-content: center; border-radius: 8px;">
+                  ${renderPixelIcon('lock', 12, 'var(--text-secondary)')} Pintu Tetap Tertutup (FALSE)
+                </button>
+                <button id="btn-hipotesis-salah" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 12px; min-height: 42px; text-align: center; justify-content: center; border-radius: 8px;">
+                  ${renderPixelIcon('play', 12, 'var(--text-secondary)')} Pintu Terbuka (TRUE)
+                </button>
+              </div>
+
+              <!-- Respon Validasi Interaktif Pak Budi -->
+              <div id="kotak-respon-hipotesis" style="display: none; border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.55; transition: all 0.2s ease;"></div>
+            </div>
+
+            <!-- Peta Langkah Penyelidikan (Roadmap 4 Langkah) -->
+            <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 16px; background: var(--surface-panel-alt); margin-bottom: 16px;">
+              <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                ${renderPixelIcon('map', 13, 'var(--primary)')} Agenda Penyelidikan: ${escapeHtml(studentDisplayName)}
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; font-size: 11.5px;">
+                <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
+                  <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">1</span>
+                  <span><strong>Ruang Kelas:</strong> Bedah Konsep &amp; Rangkum LKPD</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
+                  <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">2</span>
+                  <span><strong>Lab Telusur:</strong> Uji Semua Jalur Kondisi</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
+                  <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">3</span>
+                  <span><strong>Arena Bug:</strong> Tuntaskan Tantangan Logika</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px; color: var(--text-secondary);">
+                  <span style="width: 18px; height: 18px; border-radius: 50%; background: rgba(15, 118, 110, 0.12); color: var(--primary); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;">4</span>
+                  <span><strong>Evaluasi:</strong> Uji Penguasaan Logika Mandiri</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Opsi Tombol Aksi Navigasi Utama -->
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 4px;">
+              <button id="btn-dialog-to-materi" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; text-align: left; justify-content: flex-start; gap: 10px; border-radius: 8px;">
+                ${renderPixelIcon('book', 15, '#ffffff')} Masuk ke Gedung Sekolah (Buka Materi Percabangan)
+              </button>
+              ${isTracingUnlocked ? `
+              <button id="btn-dialog-to-tracing" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; text-align: left; justify-content: flex-start; gap: 10px; border-radius: 8px;">
+                ${renderPixelIcon('flask', 13, 'var(--primary)')} Lanjutkan ke Lab Telusur Kode
+              </button>
+              ` : ''}
+              <button id="btn-dialog-to-overworld" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; text-align: left; justify-content: flex-start; gap: 10px; border-radius: 8px;">
+                ${renderPixelIcon('arrow-left', 14, 'var(--text-secondary)')} Kembali ke Peta
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
     `;
 
-    // Interaktivitas Uji Hipotesis Bersama Pak Budi
+    // Ambil referensi elemen tumpukan kartu
+    const stackCards = [
+      card.querySelector<HTMLElement>('#dialog-stack-card-1'),
+      card.querySelector<HTMLElement>('#dialog-stack-card-2'),
+      card.querySelector<HTMLElement>('#dialog-stack-card-3')
+    ];
+    const stackHeaders = [
+      card.querySelector<HTMLButtonElement>('#dialog-stack-header-1'),
+      card.querySelector<HTMLButtonElement>('#dialog-stack-header-2'),
+      card.querySelector<HTMLButtonElement>('#dialog-stack-header-3')
+    ];
+    const stackBodies = [
+      card.querySelector<HTMLElement>('#dialog-stack-body-1'),
+      card.querySelector<HTMLElement>('#dialog-stack-body-2'),
+      card.querySelector<HTMLElement>('#dialog-stack-body-3')
+    ];
+    const stackBadges = [
+      card.querySelector<HTMLElement>('#dialog-stack-badge-1'),
+      card.querySelector<HTMLElement>('#dialog-stack-badge-2'),
+      card.querySelector<HTMLElement>('#dialog-stack-badge-3')
+    ];
+    const stackChevrons = [
+      card.querySelector<HTMLElement>('#dialog-stack-chevron-1'),
+      card.querySelector<HTMLElement>('#dialog-stack-chevron-2'),
+      card.querySelector<HTMLElement>('#dialog-stack-chevron-3')
+    ];
+    const stepperPills = [
+      card.querySelector<HTMLButtonElement>('#dialog-stepper-pill-1'),
+      card.querySelector<HTMLButtonElement>('#dialog-stepper-pill-2'),
+      card.querySelector<HTMLButtonElement>('#dialog-stepper-pill-3')
+    ];
+    const progressFill = card.querySelector<HTMLElement>('#dialog-progress-fill');
+    const progressText = card.querySelector<HTMLElement>('#dialog-progress-text');
+
+    const updateStackViews = (targetStack: 1 | 2 | 3, shouldScroll = false) => {
+      this.activeDialogStack = targetStack;
+      const isComplete = this.maxUnlockedDialogStack === 3 && hasCompletedDialogBefore;
+
+      // Update Stepper Bar
+      const percent = isComplete ? 100 : Math.round((this.activeDialogStack / 3) * 100);
+      if (progressFill) progressFill.style.width = `${percent}%`;
+      if (progressText) {
+        progressText.textContent = isComplete
+          ? 'Orientasi Lengkap (100% Siap)'
+          : `Tahap ${this.activeDialogStack} dari 3 • ${percent}% Dipahami`;
+      }
+
+      for (let i = 1; i <= 3; i++) {
+        const idx = i - 1;
+        const c = stackCards[idx];
+        const body = stackBodies[idx];
+        const badge = stackBadges[idx];
+        const chevron = stackChevrons[idx];
+        const pill = stepperPills[idx];
+
+        if (!c || !body || !badge || !chevron || !pill) continue;
+
+        const isUnlocked = i <= this.maxUnlockedDialogStack || hasCompletedDialogBefore;
+        const isOpen = i === this.activeDialogStack;
+        const isCompleted = (i < this.maxUnlockedDialogStack) || hasCompletedDialogBefore;
+
+        // Card classes
+        c.classList.toggle('active', isOpen);
+        c.classList.toggle('locked', !isUnlocked);
+        c.classList.toggle('completed', isCompleted && !isOpen);
+
+        // Body display
+        body.style.display = isOpen ? 'block' : 'none';
+
+        // Chevron
+        chevron.classList.toggle('expanded', isOpen);
+
+        // Badge
+        if (!isUnlocked) {
+          badge.innerHTML = `${renderPixelIcon('lock', 10, 'var(--text-muted)')} <span style="font-size: 10px; color: var(--text-muted); font-weight: 700;">Terkunci</span>`;
+          badge.style.borderColor = 'rgba(28, 25, 23, 0.15)';
+          badge.style.background = 'rgba(0, 0, 0, 0.04)';
+          badge.style.color = 'var(--text-muted)';
+        } else if (isOpen) {
+          badge.innerHTML = `<span style="width: 5px; height: 5px; border-radius: 50%; background: var(--primary);"></span> <span style="font-size: 10px; color: var(--primary); font-weight: 700;">Sedang Dibaca</span>`;
+          badge.style.borderColor = 'rgba(15, 118, 110, 0.25)';
+          badge.style.background = 'rgba(15, 118, 110, 0.08)';
+          badge.style.color = 'var(--primary)';
+        } else {
+          badge.innerHTML = `${renderPixelIcon('check', 10, 'var(--success)')} <span style="font-size: 10px; color: var(--success); font-weight: 700;">Selesai Dibaca</span>`;
+          badge.style.borderColor = 'rgba(21, 128, 61, 0.25)';
+          badge.style.background = 'rgba(21, 128, 61, 0.08)';
+          badge.style.color = 'var(--success)';
+        }
+
+        // Stepper Pill
+        pill.className = `dialog-stepper-pill ${isOpen ? 'active' : (isCompleted ? 'completed' : (isUnlocked ? '' : 'locked'))}`;
+      }
+
+      if (shouldScroll) {
+        const targetEl = stackCards[targetStack - 1];
+        if (targetEl) {
+          setTimeout(() => {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }, 60);
+        }
+      }
+    };
+
+    // Pasang Event Listener Header Kartu
+    stackHeaders.forEach((header, index) => {
+      const stackNum = (index + 1) as 1 | 2 | 3;
+      header?.addEventListener('click', () => {
+        const isUnlocked = stackNum <= this.maxUnlockedDialogStack || hasCompletedDialogBefore;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          this.showRetroToast('Selesaikan dan pahami orientasi langkah sebelumnya terlebih dahulu.', false);
+          const cardEl = stackCards[index];
+          if (cardEl) {
+            cardEl.style.transform = 'translateX(4px)';
+            setTimeout(() => { cardEl.style.transform = 'translateX(-4px)'; }, 80);
+            setTimeout(() => { cardEl.style.transform = 'none'; }, 160);
+          }
+          return;
+        }
+
+        soundFx.playButtonBlip();
+        if (this.activeDialogStack === stackNum) {
+          const body = stackBodies[index];
+          const chevron = stackChevrons[index];
+          if (body && chevron) {
+            const isCurrentlyOpen = body.style.display !== 'none';
+            body.style.display = isCurrentlyOpen ? 'none' : 'block';
+            chevron.classList.toggle('expanded', !isCurrentlyOpen);
+          }
+        } else {
+          updateStackViews(stackNum, true);
+        }
+      });
+    });
+
+    // Pasang Event Listener Stepper Pills
+    stepperPills.forEach((pill, index) => {
+      const stackNum = (index + 1) as 1 | 2 | 3;
+      pill?.addEventListener('click', () => {
+        const isUnlocked = stackNum <= this.maxUnlockedDialogStack || hasCompletedDialogBefore;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          this.showRetroToast('Tahapan ini masih terkunci. Selesaikan tahap sebelumnya terlebih dahulu.', false);
+          return;
+        }
+        soundFx.playButtonBlip();
+        updateStackViews(stackNum, true);
+      });
+    });
+
+    // Tombol Advance Stack 1 -> Stack 2
+    card.querySelector<HTMLButtonElement>('#btn-dialog-advance-1')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      if (this.maxUnlockedDialogStack < 2) {
+        this.maxUnlockedDialogStack = 2;
+      }
+      updateStackViews(2, true);
+    });
+
+    // Tombol Advance Stack 2 -> Stack 3
+    card.querySelector<HTMLButtonElement>('#btn-dialog-advance-2')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.maxUnlockedDialogStack = 3;
+      updateStackViews(3, true);
+    });
+
+    // Interaktivitas Uji Hipotesis Bersama Pak Budi (Stack 3)
     const btnBenar = card.querySelector<HTMLButtonElement>('#btn-hipotesis-benar');
     const btnSalah = card.querySelector<HTMLButtonElement>('#btn-hipotesis-salah');
     const kotakRespon = card.querySelector<HTMLElement>('#kotak-respon-hipotesis');
@@ -2603,9 +3153,9 @@ export class UIManager {
           <div style="display: flex; align-items: flex-start; gap: 8px;">
             <div style="margin-top: 1px;">${renderPixelIcon('check', 14, 'var(--primary)')}</div>
             <div>
-              <strong style="color: var(--primary);">Analisis Logika Kalian Tepat Sekali!</strong>
+              <strong style="color: var(--primary);">Analisis Logika Kamu Tepat Sekali!</strong>
               <div style="margin-top: 3px; color: var(--text-secondary); line-height: 1.5;">
-                Karena saldo Rp2.500 lebih kecil dari batas Rp4.000, ekspresi kondisi <code style="font-family: var(--font-code); color: var(--primary);">(2500 &gt;= 4000)</code> menghasilkan nilai <strong>SALAH (FALSE)</strong>. Komputer melompati instruksi pembuka gerbang dan pintu tetap tertutup aman. Kalian memiliki modal nalar yang sangat baik untuk memulai penyelidikan di ruang kelas!
+                Karena saldo Rp2.500 lebih kecil dari batas Rp4.000, ekspresi kondisi <code style="font-family: var(--font-code); color: var(--primary);">(2500 &gt;= 4000)</code> menghasilkan nilai <strong>SALAH (FALSE)</strong>. Komputer melompati instruksi pembuka gerbang dan pintu tetap tertutup aman. Kamu memiliki modal nalar yang sangat baik untuk memulai penyelidikan di ruang kelas!
               </div>
             </div>
           </div>
@@ -2636,7 +3186,7 @@ export class UIManager {
           <div style="display: flex; align-items: flex-start; gap: 8px;">
             <div style="margin-top: 1px;">${renderPixelIcon('help', 14, 'var(--warning-dark)')}</div>
             <div>
-              <strong style="color: var(--warning-dark);">Mari Teliti Bersama Pasanganmu:</strong>
+              <strong style="color: var(--warning-dark);">Mari Teliti Lebih Cermat:</strong>
               <div style="margin-top: 3px; color: var(--text-secondary); line-height: 1.5;">
                 Perhatikan angka saldonya: Rp2.500 belum memenuhi syarat minimal Rp4.000, sehingga ekspresi kondisi menghasilkan nilai <strong>SALAH (FALSE)</strong>. Jika pintu terbuka, penumpang tanpa saldo cukup bisa lolos masuk. Komputer harus menahan gerbang tetap tertutup!
               </div>
@@ -2646,7 +3196,7 @@ export class UIManager {
       }
     });
 
-    // Tombol Buka Kunci Siklus 2 pada Ringkasan Masalah
+    // Tombol Buka Kunci Siklus 2 pada Ringkasan Masalah (Stack 2)
     card.querySelectorAll<HTMLButtonElement>('.btn-unlock-cycle2-dialog').forEach((btn) => {
       btn.addEventListener('click', () => {
         soundFx.playButtonBlip();
@@ -2654,7 +3204,7 @@ export class UIManager {
       });
     });
 
-    // Navigasi Layar
+    // Navigasi Layar Utama
     card.querySelector('#btn-dialog-to-materi')?.addEventListener('click', () => {
       this.setScreen('MATERI');
     });
@@ -2680,11 +3230,14 @@ export class UIManager {
     const currentTopic = getMateriTopicById(this.activeMateriId);
     const currentIndex = MATERI_BANK.findIndex((t) => t.id === currentTopic.id);
     const isCurrentTopicLocked = currentTopic.cycleRequired === 2 && !this.isCycle2Unlocked;
+    const topicId = currentTopic.id;
+    const isAlreadyRead = this.readMateriIds.includes(topicId);
 
-    // Catat topik materi saat ini sebagai telah dibaca jika tidak terkunci
-    if (!isCurrentTopicLocked && !this.readMateriIds.includes(this.activeMateriId)) {
-      this.readMateriIds.push(this.activeMateriId);
-      void StorageService.markMateriAsRead(this.activeMateriId);
+    // Inisialisasi status progres tumpukan kartu topik aktif
+    if (isAlreadyRead || !!this.progressionState?.teacherBypassMode) {
+      this.materiMaxUnlockedStackMap[topicId] = 3;
+    } else if (!this.materiMaxUnlockedStackMap[topicId]) {
+      this.materiMaxUnlockedStackMap[topicId] = 1;
     }
 
     // Hitung materi wajib dibaca sesuai status siklus:
@@ -3208,6 +3761,11 @@ export class UIManager {
       ? 'color: var(--primary); font-weight: bold; border-color: rgba(15, 118, 110, 0.4); background: rgba(15, 118, 110, 0.1);'
       : 'color: var(--warning-dark, #92400e); font-weight: bold; border-color: rgba(217, 119, 6, 0.4); background: rgba(217, 119, 6, 0.1);';
 
+    const maxUnlocked = this.materiMaxUnlockedStackMap[topicId] || 1;
+    const activeStack = this.materiActiveStackMap[topicId] || 1;
+    const isTopicCompleted = isAlreadyRead || maxUnlocked === 3;
+    const hasInteractive = !!(currentTopic.simulator || currentTopic.interactiveCheck);
+
     contentCard.innerHTML = `
       <!-- Konten Modul Materi (diblur saat Siklus 2 terkunci) -->
       <div style="${isCurrentTopicLocked ? 'filter: blur(4px); pointer-events: none; user-select: none; max-height: 520px; overflow: hidden;' : ''}">
@@ -3229,38 +3787,209 @@ export class UIManager {
           </span>
         </div>
 
-        <!-- Analogi Kehidupan Sehari-hari jika ada -->
-        ${analogyHtml}
-
-        <!-- Ringkasan Intisari Teori -->
-        <div style="padding: 14px 16px; font-size: 13px; color: var(--text-primary); line-height: 1.6; margin-bottom: 16px; background: ${isPercabangan ? 'rgba(15, 118, 110, 0.04)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px solid ${isPercabangan ? 'rgba(15, 118, 110, 0.2)' : 'rgba(217, 119, 6, 0.2)'}; border-radius: 10px;">
-          <strong style="color: ${isPercabangan ? 'var(--primary)' : 'var(--warning-dark)'};">Intisari Teori:</strong> ${currentTopic.summary}
-        </div>
-
-        <!-- Diagram Flowchart jika ada -->
-        ${diagramHtml}
-
-        <!-- Simulator Interaktif jika ada -->
-        ${simulatorHtml}
-
-        <!-- Bagian-Bagian Materi Pembelajaran -->
-        ${sectionsHtml}
-
-        <!-- Uji Pemahaman Cepat jika ada -->
-        ${quizHtml}
-
-        <!-- Kotak Petunjuk / Tips Guru -->
-        <div class="tips-callout" style="margin-bottom: 14px;">
-          <div style="display: flex; align-items: center; gap: 6px; font-weight: bold; color: var(--warning); font-size: 12px;">
-            ${renderPixelIcon('bulb', 14, 'var(--warning)')} Tips Logika Penting:
+        <!-- Bilah Stepper Progres Materi Bertahap -->
+        <div class="materi-stepper-box" style="margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+            <span style="font-family: var(--font-code); font-size: 11px; font-weight: 700; color: var(--primary); display: inline-flex; align-items: center; gap: 6px;">
+              ${renderPixelIcon('target', 12, 'var(--primary)')} Langkah Penelaahan Materi
+            </span>
+            <span id="materi-progress-text" style="font-family: var(--font-code); font-size: 10.5px; font-weight: 700; color: var(--text-secondary);">
+              Tahap ${activeStack} dari 3 • ${isTopicCompleted ? '100% Tuntas' : `${Math.round((activeStack / 3) * 100)}% Dipelajari`}
+            </span>
           </div>
-          <p style="margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary);">
-            ${currentTopic.proTips}
-          </p>
+          <div class="materi-progress-track">
+            <div id="materi-progress-fill" class="materi-progress-fill" style="width: ${isTopicCompleted ? '100%' : `${(activeStack / 3) * 100}%`};"></div>
+          </div>
+          <div class="materi-stepper-pills">
+            <button id="materi-stepper-pill-1" type="button" class="materi-stepper-pill ${activeStack === 1 ? 'active' : (maxUnlocked >= 2 ? 'completed' : '')}">
+              ${renderPixelIcon('bulb', 12, 'currentColor')} <span>1. Konsep &amp; Alur</span>
+            </button>
+            <button id="materi-stepper-pill-2" type="button" class="materi-stepper-pill ${activeStack === 2 ? 'active' : (maxUnlocked >= 3 ? 'completed' : (maxUnlocked < 2 && !isAlreadyRead ? 'locked' : ''))}">
+              ${renderPixelIcon(maxUnlocked >= 2 || isAlreadyRead ? 'document' : 'lock', 12, 'currentColor')} <span>2. Sintaks &amp; Kode</span>
+            </button>
+            <button id="materi-stepper-pill-3" type="button" class="materi-stepper-pill ${activeStack === 3 ? 'active' : (maxUnlocked >= 3 ? (isAlreadyRead ? 'completed' : '') : (isAlreadyRead ? '' : 'locked'))}">
+              ${renderPixelIcon(maxUnlocked >= 3 || isAlreadyRead ? (hasInteractive ? 'flask' : 'check') : 'lock', 12, 'currentColor')} <span>3. ${hasInteractive ? 'Uji Interaktif' : 'Refleksi Topik'}</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Kotak Peringatan Miskonsepsi jika ada -->
-        ${misconceptionHtml}
+        <!-- STACK CONTAINER -->
+        <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px;">
+
+          <!-- STACK 1: Konsep Dasar & Diagram Alur -->
+          <div id="materi-stack-card-1" class="materi-stack-card ${activeStack === 1 ? 'active' : (isAlreadyRead ? 'completed' : '')}">
+            <button id="materi-stack-header-1" type="button" class="materi-stack-header" aria-expanded="${activeStack === 1 ? 'true' : 'false'}">
+              <div class="materi-stack-title-box">
+                <div class="materi-stack-num-badge">01</div>
+                <div>
+                  <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                    Konsep Dasar &amp; Diagram Alur
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                    Intisari teori, analogi kehidupan, dan visualisasi bagan alir (flowchart)
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="materi-stack-badge-1" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); border: 1px solid rgba(15, 118, 110, 0.25); background: rgba(15, 118, 110, 0.08); display: inline-flex; align-items: center; gap: 4px;">
+                  <span style="width: 5px; height: 5px; border-radius: 50%; background: var(--primary);"></span> Sedang Dibaca
+                </span>
+                <span id="materi-stack-chevron-1" class="materi-stack-chevron ${activeStack === 1 ? 'expanded' : ''}">
+                  ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+                </span>
+              </div>
+            </button>
+
+            <div id="materi-stack-body-1" class="materi-stack-body" style="${activeStack === 1 ? 'display: block;' : 'display: none;'}">
+              <!-- Analogi Kehidupan Sehari-hari jika ada -->
+              ${analogyHtml}
+
+              <!-- Ringkasan Intisari Teori -->
+              <div style="padding: 14px 16px; font-size: 13px; color: var(--text-primary); line-height: 1.6; margin-bottom: 14px; background: ${isPercabangan ? 'rgba(15, 118, 110, 0.04)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px solid ${isPercabangan ? 'rgba(15, 118, 110, 0.2)' : 'rgba(217, 119, 6, 0.2)'}; border-radius: 10px;">
+                <strong style="color: ${isPercabangan ? 'var(--primary)' : 'var(--warning-dark)'};">Intisari Teori:</strong> ${currentTopic.summary}
+              </div>
+
+              <!-- Diagram Flowchart jika ada -->
+              ${diagramHtml}
+
+              <div class="materi-advance-btn-box">
+                <button id="btn-materi-advance-1" type="button" class="game-btn game-btn-primary" style="padding: 10px 18px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;">
+                  Paham Konsep, Lanjut ke Bedah Sintaks &amp; Kode ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- STACK 2: Bedah Sintaks & Contoh Kode -->
+          <div id="materi-stack-card-2" class="materi-stack-card ${activeStack === 2 ? 'active' : (maxUnlocked < 2 && !isAlreadyRead ? 'locked' : (isAlreadyRead ? 'completed' : ''))}">
+            <button id="materi-stack-header-2" type="button" class="materi-stack-header" aria-expanded="${activeStack === 2 ? 'true' : 'false'}">
+              <div class="materi-stack-title-box">
+                <div class="materi-stack-num-badge">02</div>
+                <div>
+                  <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                    Bedah Sintaks, Aturan &amp; Kode Program
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                    Struktur kode C &amp; Pseudokode, tabel logika, serta tips penting
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="materi-stack-badge-2" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--text-muted); border: 1px solid rgba(28, 25, 23, 0.15); background: rgba(0, 0, 0, 0.04); display: inline-flex; align-items: center; gap: 4px;">
+                  ${maxUnlocked >= 2 || isAlreadyRead ? `${renderPixelIcon('check', 10, 'var(--success)')} <span style="color: var(--success);">Terbuka</span>` : `${renderPixelIcon('lock', 10, 'var(--text-muted)')} Terkunci`}
+                </span>
+                <span id="materi-stack-chevron-2" class="materi-stack-chevron ${activeStack === 2 ? 'expanded' : ''}">
+                  ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+                </span>
+              </div>
+            </button>
+
+            <div id="materi-stack-body-2" class="materi-stack-body" style="${activeStack === 2 ? 'display: block;' : 'display: none;'}">
+              <!-- Bagian-Bagian Materi Pembelajaran -->
+              ${sectionsHtml}
+
+              <!-- Kotak Petunjuk / Tips Guru -->
+              <div class="tips-callout" style="margin-bottom: 14px;">
+                <div style="display: flex; align-items: center; gap: 6px; font-weight: bold; color: var(--warning); font-size: 12px;">
+                  ${renderPixelIcon('bulb', 14, 'var(--warning)')} Tips Logika Penting:
+                </div>
+                <p style="margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary);">
+                  ${currentTopic.proTips}
+                </p>
+              </div>
+
+              <!-- Kotak Peringatan Miskonsepsi jika ada -->
+              ${misconceptionHtml}
+
+              <!-- Kotak Panduan Rangkuman LKPD Murid -->
+              <div style="margin: 14px 0; padding: 12px 14px; background: rgba(15, 118, 110, 0.05); border: 1.5px dashed rgba(15, 118, 110, 0.35); border-radius: 10px; display: flex; align-items: flex-start; gap: 10px;">
+                <span style="display: inline-flex; margin-top: 2px;">${renderPixelIcon('document', 14, 'var(--primary)')}</span>
+                <div style="font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
+                  <strong style="color: var(--primary); display: block; margin-bottom: 2px;">Tugas Murid pada LKPD di Meja:</strong>
+                  Sambil membaca materi ini, catat intisari konsep, tabel operator, pola kode, atau tips penting di atas ke <strong>Lembar Kerja Rangkuman (LKPD)</strong> fisikmu!
+                </div>
+              </div>
+
+              <div class="materi-advance-btn-box">
+                <button id="btn-materi-advance-2" type="button" class="game-btn game-btn-primary" style="padding: 10px 18px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;">
+                  Paham Sintaks, Lanjut ke ${hasInteractive ? 'Uji Interaktif' : 'Refleksi Topik'} ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- STACK 3: Eksplorasi Interaktif & Refleksi Mandiri -->
+          <div id="materi-stack-card-3" class="materi-stack-card ${activeStack === 3 ? 'active' : (maxUnlocked < 3 && !isAlreadyRead ? 'locked' : (isAlreadyRead ? 'completed' : ''))}">
+            <button id="materi-stack-header-3" type="button" class="materi-stack-header" aria-expanded="${activeStack === 3 ? 'true' : 'false'}">
+              <div class="materi-stack-title-box">
+                <div class="materi-stack-num-badge">03</div>
+                <div>
+                  <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary);">
+                    ${hasInteractive ? 'Eksplorasi Interaktif &amp; Cek Pemahaman' : 'Refleksi Mandiri &amp; Konfirmasi Pemahaman'}
+                  </div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 1px;">
+                    ${hasInteractive ? 'Simulasi nilai masukan dan kuis pemahaman cepat' : 'Rangkuman pemahaman konsep sebelum melanjutkan'}
+                  </div>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span id="materi-stack-badge-3" class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--text-muted); border: 1px solid rgba(28, 25, 23, 0.15); background: rgba(0, 0, 0, 0.04); display: inline-flex; align-items: center; gap: 4px;">
+                  ${maxUnlocked >= 3 || isAlreadyRead ? `${renderPixelIcon('check', 10, 'var(--success)')} <span style="color: var(--success);">Terbuka</span>` : `${renderPixelIcon('lock', 10, 'var(--text-muted)')} Terkunci`}
+                </span>
+                <span id="materi-stack-chevron-3" class="materi-stack-chevron ${activeStack === 3 ? 'expanded' : ''}">
+                  ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+                </span>
+              </div>
+            </button>
+
+            <div id="materi-stack-body-3" class="materi-stack-body" style="${activeStack === 3 ? 'display: block;' : 'display: none;'}">
+              <!-- Simulator Interaktif jika ada -->
+              ${simulatorHtml}
+
+              <!-- Uji Pemahaman Cepat jika ada -->
+              ${quizHtml}
+
+              <!-- Jika tidak ada simulator dan kuis, tampilkan refleksi pemahaman -->
+              ${!hasInteractive ? `
+                <div style="border: 1px solid var(--border-subtle); border-radius: 12px; padding: 16px 18px; background: rgba(15, 118, 110, 0.04); margin-bottom: 14px;">
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                    ${renderPixelIcon('check', 14, 'var(--primary)')}
+                    <span style="font-family: var(--font-pixel); font-size: 9.5px; color: var(--primary);">Refleksi Pemahaman Konsep</span>
+                  </div>
+                  <p style="font-size: 12.5px; color: var(--text-primary); line-height: 1.55; margin-bottom: 10px;">
+                    Kamu telah menuntaskan penelusuran konsep dan aturan kode untuk topik <strong>${escapeHtml(currentTopic.title)}</strong>.
+                  </p>
+                  <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-secondary);">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      ${renderPixelIcon('check', 11, 'var(--success)')} Memahami struktur dan alur logika konsep ini.
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      ${renderPixelIcon('check', 11, 'var(--success)')} Memahami representasi sintaks Bahasa C dan Pseudokode.
+                    </div>
+                  </div>
+                </div>
+              ` : ''}
+
+              <!-- Banner Status Tuntas Topik -->
+              <div style="background: rgba(21, 128, 61, 0.06); border: 1px solid rgba(21, 128, 61, 0.25); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px;">
+                ${renderPixelIcon('trophy', 16, 'var(--success)')}
+                <div style="font-size: 12px; color: var(--text-primary); line-height: 1.45;">
+                  <strong style="color: var(--success);">Topik Tuntas Dipelajari!</strong> Pemahaman topik ini telah tercatat pada portofolio belajar gawai kamu.
+                </div>
+              </div>
+
+              <!-- Tombol Aksi Akhir Topik -->
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 6px;">
+                ${currentIndex < MATERI_BANK.length - 1 ? `
+                  <button id="btn-stack3-next-topic" type="button" class="game-btn game-btn-primary" style="min-height: 44px; justify-content: center; gap: 8px; border-radius: 8px;">
+                    <span>Lanjut ke Topik Berikutnya (${escapeHtml(MATERI_BANK[currentIndex + 1]!.title)})</span> ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
 
       <!-- Overlay Kunci Siklus 2 (tampil saat modul Siklus 2 terkunci) -->
@@ -3314,12 +4043,226 @@ export class UIManager {
         <div class="materi-nav-status-row">
           <div class="materi-read-status-hint ${isAllRequiredRead ? 'is-complete' : 'is-pending'}">
             ${isAllRequiredRead
-              ? `${renderPixelIcon('check', 12, 'var(--success)')} <span>Seluruh <strong>${totalRequired} materi ${this.isCycle2Unlocked ? 'Siklus 1 & 2' : 'Siklus 1'}</strong> telah dipelajari. Siap melanjutkan ke Lab Telusur!</span>`
-              : `${renderPixelIcon('shield', 12, 'var(--warning-dark)')} <span>Buka dan pelajari seluruh <strong>${totalRequired} materi ${this.isCycle2Unlocked ? 'Siklus 1 & 2' : 'Siklus 1'}</strong> (${readRequiredCount}/${totalRequired} selesai) untuk membuka Lab Telusur.</span>`}
+        ? `${renderPixelIcon('check', 12, 'var(--success)')} <span>Seluruh <strong>${totalRequired} materi ${this.isCycle2Unlocked ? 'Siklus 1 & 2' : 'Siklus 1'}</strong> telah dipelajari. Siap melanjutkan ke Lab Telusur!</span>`
+        : `${renderPixelIcon('shield', 12, 'var(--warning-dark)')} <span>Buka dan pelajari seluruh <strong>${totalRequired} materi ${this.isCycle2Unlocked ? 'Siklus 1 & 2' : 'Siklus 1'}</strong> (${readRequiredCount}/${totalRequired} selesai) untuk membuka Lab Telusur.</span>`}
           </div>
         </div>
       </nav>
     `;
+
+    // Pasang Referensi Elemen Tumpukan Kartu Materi
+    const stackCards = [
+      contentCard.querySelector<HTMLElement>('#materi-stack-card-1'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-card-2'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-card-3')
+    ];
+    const stackHeaders = [
+      contentCard.querySelector<HTMLButtonElement>('#materi-stack-header-1'),
+      contentCard.querySelector<HTMLButtonElement>('#materi-stack-header-2'),
+      contentCard.querySelector<HTMLButtonElement>('#materi-stack-header-3')
+    ];
+    const stackBodies = [
+      contentCard.querySelector<HTMLElement>('#materi-stack-body-1'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-body-2'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-body-3')
+    ];
+    const stackBadges = [
+      contentCard.querySelector<HTMLElement>('#materi-stack-badge-1'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-badge-2'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-badge-3')
+    ];
+    const stackChevrons = [
+      contentCard.querySelector<HTMLElement>('#materi-stack-chevron-1'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-chevron-2'),
+      contentCard.querySelector<HTMLElement>('#materi-stack-chevron-3')
+    ];
+    const stepperPills = [
+      contentCard.querySelector<HTMLButtonElement>('#materi-stepper-pill-1'),
+      contentCard.querySelector<HTMLButtonElement>('#materi-stepper-pill-2'),
+      contentCard.querySelector<HTMLButtonElement>('#materi-stepper-pill-3')
+    ];
+    const progressFill = contentCard.querySelector<HTMLElement>('#materi-progress-fill');
+    const progressText = contentCard.querySelector<HTMLElement>('#materi-progress-text');
+
+    const updateStackViews = (targetStack: 1 | 2 | 3, shouldScroll = false) => {
+      this.materiActiveStackMap[topicId] = targetStack;
+      const curMax = this.materiMaxUnlockedStackMap[topicId] || 1;
+      const isComplete = curMax === 3 || isAlreadyRead;
+
+      // Update Stepper Bar
+      const percent = isComplete ? 100 : Math.round((targetStack / 3) * 100);
+      if (progressFill) progressFill.style.width = `${percent}%`;
+      if (progressText) {
+        progressText.textContent = isComplete
+          ? 'Materi Selesai (100% Tuntas)'
+          : `Tahap ${targetStack} dari 3 • ${percent}% Dipelajari`;
+      }
+
+      // Jika mencapai stack 3, otomatis tandai materi sebagai dibaca jika belum
+      if (targetStack === 3 && !isCurrentTopicLocked && !this.readMateriIds.includes(topicId)) {
+        this.readMateriIds.push(topicId);
+        void StorageService.markMateriAsRead(topicId);
+        this.showRetroToast(`Topik "${currentTopic.title}" tuntas dipelajari!`, true);
+
+        // Perbarui status tombol Lab Telusur di bilah bawah jika semua topik terpenuhi
+        const updatedReadCount = requiredTopics.filter((t) => this.readMateriIds.includes(t.id)).length;
+        const updatedAllRead = updatedReadCount >= totalRequired || !!this.progressionState?.teacherBypassMode;
+        const btnToTracing = contentCard.querySelector<HTMLButtonElement>('#btn-to-tracing');
+        const readHint = contentCard.querySelector<HTMLElement>('.materi-read-status-hint');
+
+        if (btnToTracing) {
+          if (updatedAllRead) {
+            btnToTracing.disabled = false;
+            btnToTracing.className = 'game-btn game-btn-success materi-nav-cta';
+            btnToTracing.style.opacity = '1';
+            btnToTracing.style.cursor = 'pointer';
+            btnToTracing.innerHTML = `${renderPixelIcon('flask', 14, '#ffffff')} <span>Pahami Konsep &amp; Lanjut ke Lab Telusur</span> ${renderPixelIcon('arrow-right', 12, '#ffffff')}`;
+          } else {
+            btnToTracing.innerHTML = `${renderPixelIcon('lock', 14, 'currentColor')} <span>Pelajari Materi (${updatedReadCount}/${totalRequired}) untuk Lanjut</span>`;
+          }
+        }
+        if (readHint) {
+          if (updatedAllRead) {
+            readHint.className = 'materi-read-status-hint is-complete';
+            readHint.innerHTML = `${renderPixelIcon('check', 12, 'var(--success)')} <span>Seluruh <strong>${totalRequired} materi ${this.isCycle2Unlocked ? 'Siklus 1 & 2' : 'Siklus 1'}</strong> telah dipelajari. Siap melanjutkan ke Lab Telusur!</span>`;
+          } else {
+            readHint.innerHTML = `${renderPixelIcon('shield', 12, 'var(--warning-dark)')} <span>Buka dan pelajari seluruh <strong>${totalRequired} materi ${this.isCycle2Unlocked ? 'Siklus 1 & 2' : 'Siklus 1'}</strong> (${updatedReadCount}/${totalRequired} selesai) untuk membuka Lab Telusur.</span>`;
+          }
+        }
+      }
+
+      for (let i = 1; i <= 3; i++) {
+        const idx = i - 1;
+        const c = stackCards[idx];
+        const body = stackBodies[idx];
+        const badge = stackBadges[idx];
+        const chevron = stackChevrons[idx];
+        const pill = stepperPills[idx];
+
+        if (!c || !body || !badge || !chevron || !pill) continue;
+
+        const isUnlocked = i <= (this.materiMaxUnlockedStackMap[topicId] || 1) || isAlreadyRead;
+        const isOpen = i === targetStack;
+        const isCompleted = (i < (this.materiMaxUnlockedStackMap[topicId] || 1)) || isAlreadyRead;
+
+        c.classList.toggle('active', isOpen);
+        c.classList.toggle('locked', !isUnlocked);
+        c.classList.toggle('completed', isCompleted && !isOpen);
+
+        body.style.display = isOpen ? 'block' : 'none';
+        chevron.classList.toggle('expanded', isOpen);
+
+        if (!isUnlocked) {
+          badge.innerHTML = `${renderPixelIcon('lock', 10, 'var(--text-muted)')} <span style="font-size: 10px; color: var(--text-muted); font-weight: 700;">Terkunci</span>`;
+          badge.style.borderColor = 'rgba(28, 25, 23, 0.15)';
+          badge.style.background = 'rgba(0, 0, 0, 0.04)';
+          badge.style.color = 'var(--text-muted)';
+        } else if (isOpen) {
+          badge.innerHTML = `<span style="width: 5px; height: 5px; border-radius: 50%; background: var(--primary);"></span> <span style="font-size: 10px; color: var(--primary); font-weight: 700;">Sedang Dibaca</span>`;
+          badge.style.borderColor = 'rgba(15, 118, 110, 0.25)';
+          badge.style.background = 'rgba(15, 118, 110, 0.08)';
+          badge.style.color = 'var(--primary)';
+        } else {
+          badge.innerHTML = `${renderPixelIcon('check', 10, 'var(--success)')} <span style="font-size: 10px; color: var(--success); font-weight: 700;">Selesai Dibaca</span>`;
+          badge.style.borderColor = 'rgba(21, 128, 61, 0.25)';
+          badge.style.background = 'rgba(21, 128, 61, 0.08)';
+          badge.style.color = 'var(--success)';
+        }
+
+        pill.className = `materi-stepper-pill ${isOpen ? 'active' : (isCompleted ? 'completed' : (isUnlocked ? '' : 'locked'))}`;
+      }
+
+      if (shouldScroll) {
+        const targetEl = stackCards[targetStack - 1];
+        if (targetEl) {
+          setTimeout(() => {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }, 60);
+        }
+      }
+    };
+
+    // Event Listener Header Kartu
+    stackHeaders.forEach((header, index) => {
+      const stackNum = (index + 1) as 1 | 2 | 3;
+      header?.addEventListener('click', () => {
+        const isUnlocked = stackNum <= (this.materiMaxUnlockedStackMap[topicId] || 1) || isAlreadyRead;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          this.showRetroToast('Selesaikan dan pahami bagian materi sebelumnya terlebih dahulu.', false);
+          const cardEl = stackCards[index];
+          if (cardEl) {
+            cardEl.style.transform = 'translateX(4px)';
+            setTimeout(() => { cardEl.style.transform = 'translateX(-4px)'; }, 80);
+            setTimeout(() => { cardEl.style.transform = 'none'; }, 160);
+          }
+          return;
+        }
+
+        soundFx.playButtonBlip();
+        if (this.materiActiveStackMap[topicId] === stackNum) {
+          const body = stackBodies[index];
+          const chevron = stackChevrons[index];
+          if (body && chevron) {
+            const isCurrentlyOpen = body.style.display !== 'none';
+            body.style.display = isCurrentlyOpen ? 'none' : 'block';
+            chevron.classList.toggle('expanded', !isCurrentlyOpen);
+          }
+        } else {
+          updateStackViews(stackNum, true);
+        }
+      });
+    });
+
+    // Event Listener Stepper Pills
+    stepperPills.forEach((pill, index) => {
+      const stackNum = (index + 1) as 1 | 2 | 3;
+      pill?.addEventListener('click', () => {
+        const isUnlocked = stackNum <= (this.materiMaxUnlockedStackMap[topicId] || 1) || isAlreadyRead;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          this.showRetroToast('Bagian materi ini masih terkunci. Pelajari bagian sebelumnya terlebih dahulu.', false);
+          return;
+        }
+        soundFx.playButtonBlip();
+        updateStackViews(stackNum, true);
+      });
+    });
+
+    // Tombol Advance 1 -> 2
+    contentCard.querySelector<HTMLButtonElement>('#btn-materi-advance-1')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      const curMax = this.materiMaxUnlockedStackMap[topicId] || 1;
+      if (curMax < 2) {
+        this.materiMaxUnlockedStackMap[topicId] = 2;
+      }
+      updateStackViews(2, true);
+    });
+
+    // Tombol Advance 2 -> 3
+    contentCard.querySelector<HTMLButtonElement>('#btn-materi-advance-2')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.materiMaxUnlockedStackMap[topicId] = 3;
+      updateStackViews(3, true);
+    });
+
+    // Tombol Lanjut ke Topik Berikutnya di Stack 3
+    contentCard.querySelector<HTMLButtonElement>('#btn-stack3-next-topic')?.addEventListener('click', () => {
+      if (currentIndex < MATERI_BANK.length - 1) {
+        const nextTopic = MATERI_BANK[currentIndex + 1]!;
+        if (nextTopic.cycleRequired === 2 && !this.isCycle2Unlocked) {
+          soundFx.playLogicFalse();
+          this.activeMateriId = nextTopic.id;
+          this.render();
+          this.scrollToTop();
+        } else {
+          soundFx.playButtonBlip();
+          this.activeMateriId = nextTopic.id;
+          this.render();
+          this.scrollToTop();
+        }
+      }
+    });
 
     // Pasang Logika Simulator Interaktif (jika ada pada topik aktif)
     if (currentTopic.simulator) {
@@ -3538,6 +4481,195 @@ export class UIManager {
     return container;
   }
 
+  /**
+   * Menampilkan atau memperbarui panduan misi interaktif kontekstual untuk Lab Telusur (4 Langkah Linier)
+   * Mengutamakan pembaharuan banner inline (tanpa menutupi soal). Floating toast hanya dimunculkan jika diminta secara eksplisit.
+   */
+  public showMissionGuidanceToast(step: TracingWizardStep, showFloatingToast = false): void {
+    const guidanceMap: Record<TracingWizardStep, MissionGuidanceMeta & { icon: PixelIconType }> = {
+      1: {
+        step: 1,
+        tag: 'MISI 1: BACA MASALAH',
+        title: 'Baca Masalah',
+        instruction: 'Baca skenario masalah program dan cermati variabel kondisi sebelum melangkah!',
+        icon: 'document'
+      },
+      2: {
+        step: 2,
+        tag: 'MISI 2: PREDIKSI PERCABANGAN',
+        title: 'Prediksi Percabangan',
+        instruction: 'Masukkan angka uji, lalu pilih dugaanmu: apakah kondisi Benar atau Salah?',
+        icon: 'target'
+      },
+      3: {
+        step: 3,
+        tag: 'MISI 3: TRACING & EKSEKUSI',
+        title: 'Tracing & Eksekusi',
+        instruction: 'Tekan "Maju" atau "Jalankan Simulasi" untuk membuktikan alur baris demi baris di Meja Kerja!',
+        icon: 'play'
+      },
+      4: {
+        step: 4,
+        tag: 'MISI 4: TARIK KESIMPULAN',
+        title: 'Tarik Kesimpulan',
+        instruction: 'Misi selesai! Bandingkan tebakanmu dengan hasil nyata eksekusi komputer untuk memverifikasi logikamu!',
+        icon: 'check'
+      }
+    };
+
+    const g = guidanceMap[step];
+    if (!g) return;
+
+    // 1. Perbarui Banner Panduan Misi Inline jika ada di DOM (Zero Screen Occlusion)
+    const inlineBox = document.getElementById('tracing-workflow-mission-box');
+    if (inlineBox) {
+      inlineBox.innerHTML = `
+        <div class="mission-inline-inner">
+          <span class="mission-inline-icon-box">
+            ${renderPixelIcon(g.icon, 14, 'var(--primary)')}
+          </span>
+          <div class="mission-inline-content">
+            <div class="mission-inline-badge-row">
+              <span class="mission-inline-step-badge">LANGKAH ${g.step} DARI 4</span>
+              <span class="mission-inline-tag">${escapeHtml(g.tag)}</span>
+            </div>
+            <span class="mission-inline-text">${escapeHtml(g.instruction)}</span>
+          </div>
+        </div>
+      `;
+      inlineBox.classList.remove('mission-box-pulse');
+      void inlineBox.offsetWidth; // trigger reflow
+      inlineBox.classList.add('mission-box-pulse');
+    }
+
+    // Jika tidak diminta menampilkan floating toast (misal transisi wizard biasa), selesai di sini
+    if (!showFloatingToast) return;
+
+    // 2. Jika floating toast diminta secara eksplisit:
+    const existingToast = document.querySelector<HTMLElement>('.mission-guidance-toast');
+    if (existingToast) {
+      existingToast.remove();
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'mission-guidance-toast';
+    toast.innerHTML = `
+      <div class="mission-toast-inner">
+        <span class="mission-toast-icon-box">
+          ${renderPixelIcon(g.icon, 14, 'var(--primary)')}
+        </span>
+        <div class="mission-toast-content">
+          <div class="mission-toast-badge-row">
+            <span class="mission-toast-step-badge">LANGKAH ${g.step} DARI 4</span>
+            <span class="mission-toast-tag">${escapeHtml(g.tag)}</span>
+          </div>
+          <span class="mission-toast-text">${escapeHtml(g.instruction)}</span>
+        </div>
+        <button type="button" class="mission-toast-close" aria-label="Tutup panduan">&times;</button>
+      </div>
+    `;
+
+    toast.querySelector('.mission-toast-close')?.addEventListener('click', () => {
+      toast.remove();
+    });
+
+    document.body.appendChild(toast);
+
+    window.setTimeout(() => {
+      if (document.body.contains(toast)) {
+        toast.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translate(-50%, 15px)';
+        window.setTimeout(() => toast.remove(), 260);
+      }
+    }, 2800);
+  }
+
+  /**
+   * Mengatur navigasi linier 4-Langkah Wizard di Lab Telusur
+   */
+  public goToTracingStep(step: TracingWizardStep, showToast = true, parent?: HTMLElement): void {
+    const isCompletedRun = this.currentStepIndex >= (this.currentTraceResult?.steps.length || 1) - 1 && this.userPrediction !== null;
+
+    if (step === 3 && (!this.isInputApplied || !this.userPrediction)) {
+      this.showRetroToast('Selesaikan Langkah 2 terlebih dahulu: tentukan nilai masukan dan pilih dugaan cabang alur!', false);
+      return;
+    }
+    if (step === 4 && (!isCompletedRun || !this.userPrediction)) {
+      this.showRetroToast('Jalankan simulasi di Meja Kerja (Langkah 3) hingga baris selesai terlebih dahulu!', false);
+      return;
+    }
+
+    this.tracingWizardStep = step;
+
+    if (showToast) {
+      this.showMissionGuidanceToast(step);
+    }
+
+    const root = parent || this.overlayContainer;
+
+    // Sinkronisasi status Pita Alur Belajar
+    const wfStep1 = root.querySelector<HTMLElement>('#wf-step-1');
+    const wfStep2 = root.querySelector<HTMLElement>('#wf-step-2');
+    const wfStep3 = root.querySelector<HTMLElement>('#wf-step-3');
+    const wfStep4 = root.querySelector<HTMLElement>('#wf-step-4');
+
+    const isStep1Done = this.isInputApplied || this.userPrediction !== null || step > 1;
+    const isStep2Done = this.userPrediction !== null || step > 2;
+    const isStep3Done = isCompletedRun || step > 3;
+
+    if (wfStep1) {
+      wfStep1.classList.toggle('completed', isStep1Done && step !== 1);
+      wfStep1.classList.toggle('active', step === 1);
+    }
+    if (wfStep2) {
+      wfStep2.classList.toggle('completed', isStep2Done && step !== 2);
+      wfStep2.classList.toggle('active', step === 2);
+    }
+    if (wfStep3) {
+      wfStep3.classList.toggle('completed', isStep3Done && step !== 3);
+      wfStep3.classList.toggle('active', step === 3);
+    }
+    if (wfStep4) {
+      wfStep4.classList.toggle('completed', isCompletedRun && (this.progressionState?.stepTracingCompleted || false));
+      wfStep4.classList.toggle('active', step === 4);
+    }
+
+    // Navigasi & fokus sesuai langkah aktif
+    const heroCard = root.querySelector<HTMLElement>('.tracing-hero-card');
+    const collBody = heroCard?.querySelector<HTMLElement>('#hero-collapsible-body');
+    const compactSum = heroCard?.querySelector<HTMLElement>('#hero-compact-summary');
+    const toggleBtn = heroCard?.querySelector<HTMLButtonElement>('#btn-toggle-hero-card');
+
+    if (step === 1) {
+      this.isTracingHeroCollapsed = false;
+      if (collBody) collBody.style.display = 'flex';
+      if (compactSum) compactSum.style.display = 'none';
+      if (toggleBtn) toggleBtn.innerHTML = `${renderPixelIcon('arrow-up', 10, 'currentColor')} Ciutkan Setup`;
+      const storyCallout = root.querySelector<HTMLElement>('.tracing-story-callout');
+      storyCallout?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (step === 2) {
+      this.isTracingHeroCollapsed = false;
+      if (collBody) collBody.style.display = 'flex';
+      if (compactSum) compactSum.style.display = 'none';
+      if (toggleBtn) toggleBtn.innerHTML = `${renderPixelIcon('arrow-up', 10, 'currentColor')} Ciutkan Setup`;
+      const setupGrid = root.querySelector<HTMLElement>('.tracing-setup-grid');
+      setupGrid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const inputEl = root.querySelector<HTMLInputElement>('#input-trace-val');
+      if (inputEl && !this.isInputApplied) inputEl.focus();
+    } else if (step === 3) {
+      this.isTracingHeroCollapsed = true;
+      if (collBody) collBody.style.display = 'none';
+      if (compactSum) compactSum.style.display = 'flex';
+      if (toggleBtn) toggleBtn.innerHTML = `${renderPixelIcon('arrow-down', 10, 'currentColor')} Buka Setup`;
+      const workbench = root.querySelector<HTMLElement>('#tracing-workbench-anchor');
+      workbench?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (step === 4) {
+      const zoneEval = root.querySelector<HTMLElement>('.tracing-zone-evaluation');
+      zoneEval?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   // =================================================================
   // Layar 05: Penelusur Kode Langkah-demi-Langkah (Code Tracing Arena)
   // =================================================================
@@ -3546,17 +4678,196 @@ export class UIManager {
     container.className = 'tracing-screen-layout';
 
     // =========================================================================
-    // 0. Pita Panduan Alur Belajar Terstruktur (Pedagogical Stepper Ribbon)
+    // 0.A. Papan Misi Kasus Wajib Lab Telusur (Multi-Case Mission Card Stepper)
+    // =========================================================================
+    const cycleCap = this.isCycle2Unlocked ? 2 : 1;
+    const availableModules = CASE_MODULES.filter(m => m.cycleRequired <= cycleCap);
+    const activeModuleCount = availableModules.length;
+    let completedModuleCount = 0;
+    availableModules.forEach(mod => {
+      const prog = this.allModuleProgress[mod.id];
+      const branchDefs = MODULE_BRANCHES[mod.id] || [];
+      const testedCount = prog?.testedBranches?.length || 0;
+      if (testedCount >= branchDefs.length || !!prog?.isCompleted) {
+        completedModuleCount++;
+      }
+    });
+
+    const caseStepperContainer = document.createElement('div');
+    caseStepperContainer.className = 'tracing-case-stepper';
+    caseStepperContainer.id = 'tracing-case-stepper';
+
+    const cycleTitle = this.isCycle2Unlocked ? 'Siklus 2' : 'Siklus 1';
+    const totalPointsTarget = 100;
+    const currentTracingScore = this.formativeScores?.tracingScore || 0;
+
+    caseStepperContainer.innerHTML = `
+      <div class="tracing-case-stepper-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; background: rgba(15, 118, 110, 0.12); color: var(--primary);">
+            ${renderPixelIcon('flask', 15, 'var(--primary)')}
+          </span>
+          <div>
+            <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 800; color: var(--text-primary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span>Target Misi Lab: ${activeModuleCount} Kasus Wajib (${cycleTitle})</span>
+              <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.1); border-color: rgba(15, 118, 110, 0.25);">
+                Total 100 Poin
+              </span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+              Selesaikan seluruh ${activeModuleCount} kasus di bawah ini untuk mengumpulkan total 100 Poin dan meraih 2 Bintang formatif.
+            </div>
+          </div>
+        </div>
+        <div class="tracing-case-stepper-summary">
+          <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span>Tuntas: <strong style="color: ${completedModuleCount === activeModuleCount ? 'var(--success)' : 'var(--primary)'};">${completedModuleCount}/${activeModuleCount} Kasus</strong></span>
+            <span style="color: var(--border-retro);">|</span>
+            <span>Skor Telusur: <strong style="color: var(--primary);">${currentTracingScore}/${totalPointsTarget}</strong></span>
+          </div>
+        </div>
+      </div>
+      <div class="tracing-case-cards-grid">
+        ${availableModules.map((mod, idx) => {
+          const isActive = mod.id === this.activeModule.id;
+          const branchDefs = MODULE_BRANCHES[mod.id] || [];
+          const prog = this.allModuleProgress[mod.id];
+          const testedBranches = prog?.testedBranches || [];
+          const testedCount = testedBranches.length;
+          const totalBranches = branchDefs.length;
+          const isDone = testedCount >= totalBranches || !!prog?.isCompleted;
+          const isPartial = testedCount > 0 && !isDone;
+          const isLocked = mod.cycleRequired === 2 && !this.isCycle2Unlocked;
+
+          const defaultWeight = this.isCycle2Unlocked
+            ? (idx < 2 ? 15 : (idx === 2 ? 20 : 25))
+            : (idx < 2 ? 30 : 40);
+          const weight = mod.weightPoints || defaultWeight;
+
+          let statusClass = 'status-pending';
+          let statusBadgeText = `0/${totalBranches} Cabang (${weight} Poin)`;
+          let statusColor = 'var(--text-muted)';
+          let statusBg = 'var(--surface-code)';
+          let statusIcon: PixelIconType = 'refresh';
+
+          if (isDone) {
+            statusClass = 'status-completed';
+            statusBadgeText = `${testedCount}/${totalBranches} Cabang Selesai (${weight} Poin)`;
+            statusColor = 'var(--success)';
+            statusBg = 'rgba(21, 128, 61, 0.12)';
+            statusIcon = 'check';
+          } else if (isPartial) {
+            statusClass = 'status-partial';
+            statusBadgeText = `${testedCount}/${totalBranches} Cabang (Uji Cabang 2)`;
+            statusColor = '#b45309';
+            statusBg = 'rgba(245, 158, 11, 0.14)';
+            statusIcon = 'target';
+          }
+
+          return `
+            <div class="tracing-case-card ${isActive ? 'is-active' : ''} ${statusClass} ${isLocked ? 'is-locked' : ''}" data-case-id="${mod.id}" title="${isLocked ? 'Terkunci Siklus 2' : `Pilih Kasus ${idx + 1}: ${escapeHtml(mod.title)}`}">
+              <div class="case-card-header">
+                <span class="case-card-num">KASUS ${idx + 1}</span>
+                <span class="case-card-weight">+${weight} POIN</span>
+              </div>
+              <div class="case-card-title">${escapeHtml(mod.title)}</div>
+              <div class="case-card-concept">${escapeHtml(mod.concept)}</div>
+              <div class="case-card-status" style="color: ${statusColor}; background: ${statusBg};">
+                ${renderPixelIcon(statusIcon, 11, statusColor)}
+                <span>${statusBadgeText}</span>
+              </div>
+              ${isActive ? `
+                <div class="case-card-active-indicator">
+                  <span class="pulse-dot"></span> SEDANG DITELUSURI
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+
+    caseStepperContainer.querySelectorAll<HTMLElement>('.tracing-case-card').forEach((card) => {
+      card.addEventListener('click', async () => {
+        const caseId = card.getAttribute('data-case-id');
+        if (!caseId) return;
+        const found = CASE_MODULES.find((m) => m.id === caseId);
+        if (!found) return;
+        if (found.cycleRequired === 2 && !this.isCycle2Unlocked) {
+          soundFx.playLogicFalse();
+          this.showStudentTokenModal(found.id);
+          return;
+        }
+        if (found.id === this.activeModule.id) {
+          return;
+        }
+        soundFx.playButtonBlip();
+        this.activeModule = found;
+        this.resetTracingToInitialState();
+        const rawProg = await StorageService.getModuleProgress(found.id);
+        const prog: ModuleProgress = rawProg || {
+          testedBranches: [],
+          stars: 0,
+          isCompleted: false,
+          xpEarned: 0,
+          updatedAt: Date.now()
+        };
+        this.coverageView.update(prog, found.id, this.formativeScores?.tracingScore || 0, this.isCycle2Unlocked);
+        this.render();
+        this.scrollToTop();
+        window.setTimeout(() => {
+          this.showMissionGuidanceToast(1);
+        }, 120);
+      });
+    });
+
+    container.appendChild(caseStepperContainer);
+
+    // =========================================================================
+    // 0.B. Pita Panduan Alur Belajar Terstruktur (Pedagogical Stepper Ribbon)
     // =========================================================================
     const workflowRibbon = document.createElement('div');
     workflowRibbon.className = 'tracing-workflow-ribbon';
     workflowRibbon.id = 'tracing-workflow-ribbon';
 
-    const step1Status = !this.isInputApplied && this.userPrediction === null ? 'active' : 'completed';
-    const step2Status = this.isInputApplied ? 'completed' : '';
-    const step3Status = this.userPrediction !== null ? 'completed' : (this.isInputApplied ? 'active' : '');
     const isCompletedRun = this.currentStepIndex >= (this.currentTraceResult?.steps.length || 1) - 1 && this.userPrediction !== null;
-    const step4Status = isCompletedRun ? 'completed' : (this.userPrediction !== null ? 'active' : '');
+    const step1Status = this.tracingWizardStep === 1 ? 'active' : (this.isInputApplied || this.userPrediction !== null ? 'completed' : '');
+    const step2Status = this.tracingWizardStep === 2 ? 'active' : (this.userPrediction !== null ? 'completed' : '');
+    const step3Status = this.tracingWizardStep === 3 ? 'active' : (isCompletedRun ? 'completed' : '');
+    const step4Status = this.tracingWizardStep === 4 ? 'active' : (isCompletedRun && (this.progressionState?.stepTracingCompleted || false) ? 'completed' : '');
+
+    const currentMissionStep = this.tracingWizardStep || 1;
+    const missionMetaMap: Record<TracingWizardStep, MissionGuidanceMeta & { icon: PixelIconType }> = {
+      1: {
+        step: 1,
+        tag: 'MISI 1: BACA MASALAH',
+        title: 'Baca Masalah',
+        instruction: 'Baca skenario masalah program dan cermati variabel kondisi sebelum melangkah!',
+        icon: 'document'
+      },
+      2: {
+        step: 2,
+        tag: 'MISI 2: PREDIKSI PERCABANGAN',
+        title: 'Prediksi Percabangan',
+        instruction: 'Masukkan angka uji, lalu pilih dugaanmu: apakah kondisi Benar atau Salah?',
+        icon: 'target'
+      },
+      3: {
+        step: 3,
+        tag: 'MISI 3: TRACING & EKSEKUSI',
+        title: 'Tracing & Eksekusi',
+        instruction: 'Tekan "Maju" atau "Jalankan Simulasi" untuk membuktikan alur baris demi baris di Meja Kerja!',
+        icon: 'play'
+      },
+      4: {
+        step: 4,
+        tag: 'MISI 4: TARIK KESIMPULAN',
+        title: 'Tarik Kesimpulan',
+        instruction: 'Misi selesai! Bandingkan tebakanmu dengan hasil nyata eksekusi komputer untuk memverifikasi logikamu!',
+        icon: 'check'
+      }
+    };
+    const currentGuidance = missionMetaMap[currentMissionStep];
 
     workflowRibbon.innerHTML = `
       <div class="tracing-workflow-header">
@@ -3568,37 +4879,58 @@ export class UIManager {
             Panduan Alur Belajar Penelusuran Logika
           </span>
         </div>
-        <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-ui);">
-          Selesaikan langkah 1 sampai 4 secara berurutan
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-ui);">
+            4 Langkah Berurutan Terpandu
+          </span>
+          <button id="btn-help-mission" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 6px 12px; min-height: 38px; display: inline-flex; align-items: center; gap: 5px;" title="Tampilkan Panduan Misi Langkah Aktif">
+            ${renderPixelIcon('bulb', 11, 'currentColor')} Panduan Misi
+          </button>
         </div>
       </div>
       <div class="tracing-workflow-steps">
-        <div class="tracing-step-item ${step1Status}" id="wf-step-1">
+        <div class="tracing-step-item ${step1Status}" id="wf-step-1" title="Langkah 1: Baca Masalah">
           <div class="tracing-step-badge">1</div>
           <div class="tracing-step-info">
-            <span class="tracing-step-title">Pilih Kasus</span>
+            <span class="tracing-step-title">Baca Masalah</span>
             <span class="tracing-step-desc">Pelajari skenario masalah program</span>
           </div>
         </div>
-        <div class="tracing-step-item ${step2Status}" id="wf-step-2">
+        <div class="tracing-step-item ${step2Status}" id="wf-step-2" title="Langkah 2: Prediksi Percabangan">
           <div class="tracing-step-badge">2</div>
           <div class="tracing-step-info">
-            <span class="tracing-step-title">Tentukan Masukan</span>
-            <span class="tracing-step-desc">Isi nilai masukan yang ingin diuji</span>
+            <span class="tracing-step-title">Prediksi Percabangan</span>
+            <span class="tracing-step-desc">Tentukan masukan &amp; dugaan alur</span>
           </div>
         </div>
-        <div class="tracing-step-item ${step3Status}" id="wf-step-3">
+        <div class="tracing-step-item ${step3Status}" id="wf-step-3" title="Langkah 3: Tracing &amp; Eksekusi">
           <div class="tracing-step-badge">3</div>
           <div class="tracing-step-info">
-            <span class="tracing-step-title">Perkirakan Jalur</span>
-            <span class="tracing-step-desc">Pilih dugaan cabang: Benar atau Salah</span>
+            <span class="tracing-step-title">Tracing &amp; Eksekusi</span>
+            <span class="tracing-step-desc">Buktikan baris demi baris di Meja Kerja</span>
           </div>
         </div>
-        <div class="tracing-step-item ${step4Status}" id="wf-step-4">
+        <div class="tracing-step-item ${step4Status}" id="wf-step-4" title="Langkah 4: Tarik Kesimpulan">
           <div class="tracing-step-badge">4</div>
           <div class="tracing-step-info">
-            <span class="tracing-step-title">Buktikan di Meja Kerja</span>
-            <span class="tracing-step-desc">Jalankan baris kode & buktikan dugaan</span>
+            <span class="tracing-step-title">Tarik Kesimpulan</span>
+            <span class="tracing-step-desc">Refleksi hasil &amp; pembuktian</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Banner Panduan Misi Terpadu (Inline Mission Guidance - Zero Content Occlusion) -->
+      <div class="tracing-workflow-mission-box" id="tracing-workflow-mission-box">
+        <div class="mission-inline-inner">
+          <span class="mission-inline-icon-box">
+            ${renderPixelIcon(currentGuidance.icon, 14, 'var(--primary)')}
+          </span>
+          <div class="mission-inline-content">
+            <div class="mission-inline-badge-row">
+              <span class="mission-inline-step-badge">LANGKAH ${currentGuidance.step} DARI 4</span>
+              <span class="mission-inline-tag">${escapeHtml(currentGuidance.tag)}</span>
+            </div>
+            <span class="mission-inline-text">${escapeHtml(currentGuidance.instruction)}</span>
           </div>
         </div>
       </div>
@@ -3606,7 +4938,7 @@ export class UIManager {
     container.appendChild(workflowRibbon);
 
     // =========================================================================
-    // ZONA 1: Orientasi & Hipotesis Awal (Langkah 1, 2, dan 3)
+    // ZONA 1: Orientasi & Hipotesis Awal (Langkah 1 dan 2)
     // =========================================================================
     const zoneOrientation = document.createElement('div');
     zoneOrientation.className = 'tracing-zone-orientation';
@@ -3615,9 +4947,12 @@ export class UIManager {
     const heroCard = document.createElement('div');
     heroCard.className = 'tracing-hero-card';
 
-    // 1.A. Bar Header: Langkah 1 - Pemilih Kasus & Token Siklus 2
+    // 1.A. Bar Header: Langkah 1 - Kasus Aktif & Kontrol Setup
     const heroTop = document.createElement('div');
     heroTop.className = 'tracing-hero-top';
+
+    const activeCaseIndex = availableModules.findIndex((m) => m.id === this.activeModule.id);
+    const activeWeight = this.activeModule.weightPoints || (activeCaseIndex < 2 ? 30 : 40);
 
     const selectEl = document.createElement('select');
     selectEl.id = 'select-module-trace';
@@ -3657,13 +4992,16 @@ export class UIManager {
         this.coverageView.update(prog, found.id, this.formativeScores?.tracingScore || 0, this.isCycle2Unlocked);
         this.render();
         this.scrollToTop();
+        window.setTimeout(() => {
+          this.showMissionGuidanceToast(1);
+        }, 120);
       }
     });
 
     heroTop.innerHTML = `
       <div class="tracing-module-picker">
         <span class="eyebrow-label" style="color: var(--primary); flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px;">
-          ${renderPixelIcon('flask', 13, 'var(--primary)')} Langkah 1: Pilih Kasus
+          ${renderPixelIcon('flask', 13, 'var(--primary)')} Langkah 1: Kasus ${activeCaseIndex + 1} (${this.activeModule.id.toUpperCase()})
         </span>
         <span class="badge-pill" style="color: ${this.isTracingPracticeMode ? 'var(--text-muted)' : 'var(--success)'}; font-weight: bold; font-size: 11px; border-color: ${this.isTracingPracticeMode ? 'var(--border-subtle)' : 'rgba(21, 128, 61, 0.4)'}; background: ${this.isTracingPracticeMode ? 'var(--surface-panel-alt)' : 'rgba(21, 128, 61, 0.1)'};">
           ${this.isTracingPracticeMode ? 'Mode Latihan' : 'Lab Formatif'}
@@ -3684,7 +5022,7 @@ export class UIManager {
     heroCompactSummary.innerHTML = `
       <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px;">
         <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.1);">
-          ${this.activeModule.id.toUpperCase()}
+          KASUS ${activeCaseIndex + 1} (${this.activeModule.id.toUpperCase()})
         </span>
         <span style="font-weight: 600; color: var(--text-primary);">
           ${this.activeModule.title}
@@ -3711,28 +5049,74 @@ export class UIManager {
     heroCollapsibleBody.style.flexDirection = 'column';
     heroCollapsibleBody.style.gap = '14px';
 
-    // 1.C. Skenario Kontekstual Masalah
+    // 1.C. Skenario Kontekstual Masalah (Langkah 1) dengan Ilustrasi Pixel Art & Narasi Mendalam
     const storyCallout = document.createElement('div');
-    storyCallout.className = 'tracing-story-callout';
+    storyCallout.className = 'tracing-story-callout wizard-step-panel';
+
+    const paragraphs = this.activeModule.storyPrompt.split('\n\n');
+    const storyHtml = paragraphs.map((p) => {
+      const isTask = p.startsWith('Tugas Penyelidikanmu:');
+      if (isTask) {
+        return `
+          <div class="tracing-story-investigation-box">
+            <div style="font-weight: 700; color: #b45309; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+              ${renderPixelIcon('target', 12, '#b45309')}
+              <span>Tugas Penyelidikan Murid:</span>
+            </div>
+            <div style="color: var(--text-primary); font-size: 12px; line-height: 1.55;">
+              ${escapeHtml(p.replace('Tugas Penyelidikanmu:\n', '').replace('Tugas Penyelidikanmu:', '')).replace(/\n/g, '<br/>')}
+            </div>
+          </div>
+        `;
+      }
+      return `<p style="margin: 0 0 8px 0; font-size: 12.5px; color: var(--text-primary); line-height: 1.6;">${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`;
+    }).join('');
+
     storyCallout.innerHTML = `
-      <div class="tracing-story-header">
-        ${renderPixelIcon('document', 12, '#b45309')} Skenario Masalah: ${this.activeModule.title}
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+        <div class="tracing-story-header">
+          ${renderPixelIcon('document', 12, '#b45309')} Skenario Masalah: Kasus ${activeCaseIndex + 1} - ${escapeHtml(this.activeModule.title)}
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: #b45309; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.3);">
+            Bobot: ${activeWeight} Poin
+          </span>
+          <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.1);">
+            Langkah 1: Orientasi Masalah
+          </span>
+        </div>
       </div>
-      <div class="tracing-story-text">
-        ${this.activeModule.storyPrompt}
+      <div class="tracing-story-body">
+        <div class="tracing-story-illustration-frame">
+          ${renderCaseIllustrationPixelArt(this.activeModule.id, 160, 120)}
+          <div class="tracing-story-illustration-caption">
+            <span>SIMULASI ${this.activeModule.id.toUpperCase()}</span>
+          </div>
+        </div>
+        <div class="tracing-story-content">
+          <div class="tracing-story-text">
+            ${storyHtml}
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 12px; border-top: 1px dashed rgba(245, 158, 11, 0.25); padding-top: 10px;">
+        <button id="btn-step1-to-step2" type="button" class="game-btn game-btn-primary" style="font-size: 12px; min-height: 48px; padding: 0 16px; display: inline-flex; align-items: center; gap: 8px;" title="Lanjut ke langkah pengisian nilai masukan dan dugaan alur">
+          <span>Lanjut: Prediksi Percabangan (Langkah 2)</span>
+          ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+        </button>
       </div>
     `;
     heroCollapsibleBody.appendChild(storyCallout);
 
-    // 1.D. Form Setup Masukan (Langkah 2) & Gerbang Hipotesis Pause & Predict (Langkah 3)
+    // 1.D. Form Setup Masukan & Gerbang Hipotesis Pause & Predict (Langkah 2)
     const branchDefs = MODULE_BRANCHES[this.activeModule.id] || MODULE_BRANCHES['m01']!;
     const setupGrid = document.createElement('div');
-    setupGrid.className = 'tracing-setup-grid';
+    setupGrid.className = 'tracing-setup-grid wizard-step-panel';
     setupGrid.innerHTML = `
-      <!-- Langkah 2: Input Nilai Uji -->
+      <!-- Langkah 2A: Input Nilai Uji & Preset Rekomendasi Cabang -->
       <div>
         <div class="eyebrow-label" style="color: var(--primary); margin-bottom: 6px; display: inline-flex; align-items: center; gap: 6px;">
-          ${renderPixelIcon('document', 12, 'var(--primary)')} Langkah 2: Tentukan Masukan
+          ${renderPixelIcon('document', 12, 'var(--primary)')} Langkah 2A: Tentukan Nilai Masukan
         </div>
         <label style="display: block; font-size: 11.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
           ${this.activeModule.inputLabel}:
@@ -3749,43 +5133,62 @@ export class UIManager {
           </span>
         </div>
         <div id="input-error-msg" style="font-size: 11px; color: var(--danger); margin-top: 6px; display: none;"></div>
+
+        ${this.activeModule.testPresets && this.activeModule.testPresets.length > 0 ? `
+          <div class="tracing-test-presets-box">
+            <div style="font-size: 11px; font-weight: 700; color: var(--primary); margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+              <span style="display: inline-flex; align-items: center; gap: 5px;">
+                ${renderPixelIcon('target', 11, 'var(--primary)')} Rekomendasi Uji Cabang:
+              </span>
+              <span style="font-size: 10px; color: var(--text-muted); font-weight: normal;">Ketuk untuk isi</span>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              ${this.activeModule.testPresets.map(preset => `
+                <button type="button" class="game-btn game-btn-secondary btn-test-preset-chip" data-preset-val="${preset.value}" data-target-branch="${preset.targetBranch}" style="font-size: 11px; padding: 6px 10px; min-height: 38px; display: inline-flex; align-items: center; gap: 6px;" title="${escapeHtml(preset.explanation)}">
+                  <span class="badge-pill" style="font-size: 9.5px; padding: 1px 5px; background: rgba(15, 118, 110, 0.15); color: var(--primary); font-weight: 700;">${escapeHtml(preset.badge)}</span>
+                  <span>${escapeHtml(preset.label)}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
       </div>
 
-      <!-- Langkah 3: Perkirakan Jalur Logika (Hipotesis Murid) -->
+      <!-- Langkah 2B: Perkirakan Jalur Logika (Hipotesis Murid) -->
       <div>
         <div class="eyebrow-label" style="color: var(--primary); margin-bottom: 6px; display: inline-flex; align-items: center; gap: 6px;">
-          ${renderPixelIcon('target', 12, 'var(--primary)')} Langkah 3: Perkirakan Jalur Logika (Hipotesis Murid)
+          ${renderPixelIcon('target', 12, 'var(--primary)')} Langkah 2B: Perkirakan Cabang Logika (Dugaan Murid)
         </div>
         <p style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 10px; line-height: 1.5;">
-          Sebelum menelusuri baris kode di bawah, perkirakan cabang logika mana yang akan ditembus oleh nilai masukan:
+          Sebelum menelusuri baris kode di Meja Kerja, tebak cabang logika mana yang akan ditembus oleh nilai masukan:
         </p>
         <div class="tracing-predict-group">
           ${branchDefs.map((b) => {
-            const isSelected = this.userPrediction === b.id;
-            const isBranchIf = b.id === 'IF';
-            const isBranchElse = b.id === 'ELSE' || b.id === 'NORMAL';
-            const badgeText = isBranchIf ? 'BENAR (IF)' : (isBranchElse ? 'SALAH (ELSE)' : b.id.replace('_', ' ').slice(0, 4).toUpperCase());
-            const isDisabled = !this.isInputApplied;
-            return `
+      const isSelected = this.userPrediction === b.id;
+      const isBranchIf = b.id === 'IF';
+      const isBranchElse = b.id === 'ELSE' || b.id === 'NORMAL';
+      const badgeText = isBranchIf ? 'BENAR (IF)' : (isBranchElse ? 'SALAH (ELSE)' : b.id.replace('_', ' ').slice(0, 4).toUpperCase());
+      const isDisabled = !this.isInputApplied;
+      return `
               <button type="button" class="tracing-predict-chip btn-predict-branch ${isSelected ? 'selected' : ''}" data-branch-id="${b.id}" ${isDisabled ? 'disabled style="opacity: 0.55; cursor: not-allowed;"' : ''}>
                 <span class="chip-key">${badgeText}</span>
                 <span>${b.label}</span>
               </button>
             `;
-          }).join('')}
+    }).join('')}
         </div>
         <div id="predict-gate-hint" style="font-size: 11px; color: #b45309; font-weight: 600; margin-top: 8px; display: flex; align-items: center; gap: 6px;">
           ${!this.isInputApplied
-            ? `${renderPixelIcon('shield', 11, '#b45309')} Langkah 2 belum selesai: Tentukan nilai masukan di samping terlebih dahulu.`
-            : (this.userPrediction
-                ? `${renderPixelIcon('check', 11, 'var(--success)')} Dugaan tercatat: Cabang <strong>${this.userPrediction}</strong>. Lanjutkan telusuri kode di Meja Kerja!`
-                : `${renderPixelIcon('target', 11, '#b45309')} Nilai masukan siap (${this.currentInputValue}). Pilih salah satu dugaan cabang di atas untuk membuka Meja Kerja!`
-              )
-          }
+        ? `${renderPixelIcon('shield', 11, '#b45309')} Langkah 2A belum selesai: Tentukan nilai masukan di samping terlebih dahulu.`
+        : (this.userPrediction
+          ? `${renderPixelIcon('check', 11, 'var(--success)')} Dugaan tercatat: Cabang <strong>${this.userPrediction}</strong>. Lanjutkan ke Meja Kerja!`
+          : `${renderPixelIcon('target', 11, '#b45309')} Masukan siap (${this.currentInputValue}). Pilih salah satu dugaan cabang di atas untuk membuka Meja Kerja!`
+        )
+      }
         </div>
-        <button id="btn-jump-to-workbench" type="button" class="game-btn game-btn-primary tracing-hypothesis-highlight-btn" style="${(this.userPrediction && this.isInputApplied) ? 'display: inline-flex;' : 'display: none;'}">
+        <button id="btn-jump-to-workbench" type="button" class="game-btn game-btn-primary tracing-hypothesis-highlight-btn" style="width: 100%; min-height: 48px; margin-top: 10px; display: ${(this.userPrediction && this.isInputApplied) ? 'inline-flex' : 'none'}; align-items: center; justify-content: center; gap: 8px;">
           ${renderPixelIcon('flask', 13, '#ffffff')}
-          <span>Uji Dugaan: Cabang ${this.userPrediction || ''} di Meja Kerja</span>
+          <span>Buktikan di Meja Kerja: Cabang ${this.userPrediction || ''} (Langkah 3)</span>
           ${renderPixelIcon('arrow-right', 12, '#ffffff')}
         </button>
       </div>
@@ -3796,10 +5199,10 @@ export class UIManager {
     container.appendChild(zoneOrientation);
 
     // =========================================================================
-    // ZONA 2: Meja Kerja Penelusuran Logika (Langkah 4 - Workbench 2-Kolom)
+    // ZONA 2: Meja Kerja Penelusuran Logika (Langkah 3 - Workbench 2-Kolom)
     // =========================================================================
     const zoneWorkbench = document.createElement('div');
-    zoneWorkbench.className = 'tracing-workbench-container';
+    zoneWorkbench.className = 'tracing-workbench-container wizard-step-panel';
     zoneWorkbench.id = 'tracing-workbench-anchor';
 
     // 0. Banner Komparasi Hipotesis Real-Time (Dugaan Murid vs Keputusan Nyata Komputer)
@@ -3822,17 +5225,17 @@ export class UIManager {
     viewSwitcher.innerHTML = `
       <div class="eyebrow-label" style="color: var(--primary); display: flex; align-items: center; gap: 6px;">
         ${renderPixelIcon('document', 12, 'var(--primary)')}
-        <span>Langkah 4A: Visualisasi Kode & Diagram Alir</span>
+        <span>Langkah 3A: Visualisasi Kode &amp; Diagram Alir</span>
       </div>
-      <div class="tracing-segmented-nav">
+      <div class="tracing-segmented-nav tracing-mobile-view-tabs">
         <button type="button" class="tracing-segmented-btn tab-btn-code ${this.tracingWorkbenchViewMode === 'CODE' ? 'active' : ''}">
-          Kode
+          ${renderPixelIcon('document', 11, 'currentColor')} <span>Kode</span>
         </button>
         <button type="button" class="tracing-segmented-btn tab-btn-flow ${this.tracingWorkbenchViewMode === 'FLOW' ? 'active' : ''}">
-          Diagram Alir
+          ${renderPixelIcon('chart', 11, 'currentColor')} <span>Diagram Alir</span>
         </button>
         <button type="button" class="tracing-segmented-btn tab-btn-both ${this.tracingWorkbenchViewMode === 'BOTH' ? 'active' : ''}">
-          Keduanya
+          ${renderPixelIcon('flask', 11, 'currentColor')} <span>Keduanya</span>
         </button>
       </div>
     `;
@@ -3879,7 +5282,7 @@ export class UIManager {
       <!-- Header Konsol -->
       <div class="eyebrow-label" style="color: var(--primary); display: flex; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);">
         ${renderPixelIcon('target', 12, 'var(--primary)')}
-        <span>Langkah 4B: Konsol Eksekusi & Telemetri Real-Time</span>
+        <span>Langkah 3B: Konsol Eksekusi &amp; Telemetri Real-Time</span>
       </div>
 
       <!-- Seksi 1: Kendali Baris Eksekusi -->
@@ -3888,19 +5291,19 @@ export class UIManager {
           Kendali Baris Eksekusi
         </div>
         <div class="tracing-stepper-grid">
-          <button id="btn-step-prev" type="button" class="game-btn game-btn-secondary" style="min-height: 44px; font-size: 12px; gap: 6px;">
+          <button id="btn-step-prev" type="button" class="game-btn game-btn-secondary" style="min-height: 48px; font-size: 12px; gap: 6px;">
             ${renderPixelIcon('arrow-left', 12, 'currentColor')} Mundur
           </button>
-          <button id="btn-step-next" type="button" class="game-btn game-btn-primary" style="min-height: 44px; font-size: 12px; gap: 6px;">
+          <button id="btn-step-next" type="button" class="game-btn game-btn-primary" style="min-height: 48px; font-size: 12px; gap: 6px;">
             Maju ${renderPixelIcon('arrow-right', 12, '#ffffff')}
           </button>
         </div>
-        <button id="btn-run-full-sim" type="button" class="game-btn game-btn-warning" style="width: 100%; min-height: 44px; font-size: 12px; gap: 8px;">
+        <button id="btn-run-full-sim" type="button" class="game-btn game-btn-warning" style="width: 100%; min-height: 48px; font-size: 12px; gap: 8px;">
           ${renderPixelIcon('run', 14, '#ffffff')} Jalankan Simulasi Lengkap
         </button>
       </div>
 
-      <!-- Seksi 2: State Inspector Langkah Aktif (Langsung di bawah tombol agar terlihat jelas di mobile) -->
+      <!-- Seksi 2: State Inspector Langkah Aktif -->
       <div class="tracing-console-section">
         <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px;">
           Penjelasan Langkah Aktif
@@ -3917,7 +5320,7 @@ export class UIManager {
         </div>
       </div>
 
-      <!-- Seksi 3: Terminal Keluaran Program (Langsung di bawah penjelasan baris) -->
+      <!-- Seksi 3: Terminal Keluaran Program -->
       <div class="tracing-console-section">
         <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px;">
           Terminal Keluaran Program
@@ -3936,7 +5339,7 @@ export class UIManager {
       <!-- Seksi 4: Telemetri Pemantau Nilai & Status Cabang -->
       <div class="tracing-console-section">
         <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.3px;">
-          Telemetri Variabel & Logika
+          Telemetri Variabel &amp; Logika
         </div>
         <div class="tracing-telemetry-row">
           <div class="tracing-telemetry-chip">
@@ -3960,16 +5363,25 @@ export class UIManager {
           Ringkasan Pengujian: Masukan = <strong id="lkpd-note-input">${this.isInputApplied ? this.currentInputValue : '-'}</strong>, Dugaan = <strong id="lkpd-note-pred">${this.userPrediction || '-'}</strong>, Jalur Nyata = <strong id="lkpd-note-branch">-</strong>.
         </div>
       </div>
+
+      <!-- Tombol Maju ke Langkah 4: Tarik Kesimpulan -->
+      <div class="tracing-console-section" id="section-conclude-btn" style="margin-top: 8px;">
+        <button id="btn-conclude-tracing" type="button" class="game-btn ${isCompletedRun ? 'game-btn-gold' : 'game-btn-secondary'}" style="width: 100%; min-height: 48px; font-size: 12px; font-weight: 700; gap: 8px; display: inline-flex; align-items: center; justify-content: center;" ${!isCompletedRun ? 'disabled title="Jalankan penelusuran hingga langkah selesai terlebih dahulu"' : ''}>
+          ${renderPixelIcon('star', 13, isCompletedRun ? '#ffffff' : 'var(--text-muted)')}
+          <span>Lanjut: Tarik Kesimpulan Hasil Uji (Langkah 4)</span>
+          ${renderPixelIcon('arrow-right', 12, isCompletedRun ? '#ffffff' : 'var(--text-muted)')}
+        </button>
+      </div>
     `;
     traceGrid.appendChild(rightCol);
     zoneWorkbench.appendChild(traceGrid);
     container.appendChild(zoneWorkbench);
 
     // =========================================================================
-    // ZONA 3: Hasil Pembuktian Hipotesis & Capaian Belajar
+    // ZONA 3: Hasil Pembuktian Hipotesis & Capaian Belajar (Langkah 4)
     // =========================================================================
     const zoneEvaluation = document.createElement('div');
-    zoneEvaluation.className = 'tracing-zone-evaluation';
+    zoneEvaluation.className = 'tracing-zone-evaluation wizard-step-panel';
     zoneEvaluation.style.cssText = `display: flex; flex-direction: column; gap: 14px;`;
 
     const evalHeader = document.createElement('div');
@@ -3977,44 +5389,24 @@ export class UIManager {
     evalHeader.style.cssText = `color: var(--primary); display: flex; align-items: center; gap: 6px;`;
     evalHeader.innerHTML = `
       ${renderPixelIcon('star', 12, 'var(--primary)')}
-      <span>Hasil Pembuktian Hipotesis & Capaian Belajar</span>
+      <span>Langkah 4: Hasil Pembuktian Hipotesis &amp; Capaian Belajar</span>
     `;
     zoneEvaluation.appendChild(evalHeader);
 
-    // 3.A. Kartu Evaluasi Metakognisi (Tebakan Murid vs Realita Program)
+    // 4.A. Kartu Evaluasi Metakognisi (Tebakan Murid vs Realita Program & Tabel LKPD)
     const evalCard = document.createElement('div');
     evalCard.id = 'prediction-evaluation-card';
     evalCard.className = 'tactile-card';
     evalCard.style.cssText = `padding: 16px 20px; border: 1px solid var(--border-retro); border-radius: 12px; background: #ffffff; transition: all 0.2s ease;`;
     zoneEvaluation.appendChild(evalCard);
 
-    // 3.B. CoverageView Pelacak 2 Bintang Capaian
+    // 4.B. CoverageView Pelacak 2 Bintang Capaian
     zoneEvaluation.appendChild(this.coverageView.getElement());
 
-    // 3.C. Kartu Aksi Lanjut ke Arena Tantangan Monster
+    // 4.C. Kartu Aksi Lanjut ke Kasus Berikutnya atau Arena Tantangan
     const nextStepCard = document.createElement('div');
     nextStepCard.className = 'tactile-card tracing-next-step-card';
-
-    const isTracingDone = !!this.progressionState?.stepTracingCompleted;
-    nextStepCard.innerHTML = `
-      <div style="flex: 1;">
-        <div class="eyebrow-label" style="color: ${isTracingDone ? 'var(--success)' : 'var(--warning)'}; margin-bottom: 2px;">
-          ${renderPixelIcon(isTracingDone ? 'check' : 'lock', 12, isTracingDone ? 'var(--success)' : 'var(--warning)')} ${isTracingDone ? 'Misi Lab Telusur Terbukti' : 'Pembuktian Sedang Berjalan'}
-        </div>
-        <div style="font-size: 12.5px; color: var(--text-primary); font-weight: 600; line-height: 1.5;">
-          ${isTracingDone ? 'Alur percabangan berhasil dibuktikan di Meja Kerja. Arena Tantangan Bug Monster kini siap dihadapi!' : 'Buktikan minimal 1 cabang logika (IF / ELSE) hingga baris selesai untuk membuka Arena Tantangan.'}
-        </div>
-      </div>
-      <button id="btn-tracing-to-battle" type="button" class="game-btn ${isTracingDone ? 'game-btn-gold' : 'game-btn-secondary'} tracing-next-step-btn" ${!isTracingDone ? 'disabled' : ''}>
-        ${renderPixelIcon('swords', 13, isTracingDone ? '#ffffff' : 'var(--text-muted)')}
-        <span>Lanjut ke Arena Tantangan Monster</span>
-        ${renderPixelIcon('arrow-right', 12, isTracingDone ? '#ffffff' : 'var(--text-muted)')}
-      </button>
-    `;
-    nextStepCard.querySelector('#btn-tracing-to-battle')?.addEventListener('click', () => {
-      this.bypassTracingGuardOnce = true;
-      this.setScreen('BATTLE');
-    });
+    this.updateNextStepCardContent(nextStepCard, container);
     zoneEvaluation.appendChild(nextStepCard);
     container.appendChild(zoneEvaluation);
 
@@ -4028,24 +5420,69 @@ export class UIManager {
     const btnStepPrev = rightCol.querySelector<HTMLButtonElement>('#btn-step-prev');
     const btnStepNext = rightCol.querySelector<HTMLButtonElement>('#btn-step-next');
     const btnRunSim = rightCol.querySelector<HTMLButtonElement>('#btn-run-full-sim');
+    const btnConclude = rightCol.querySelector<HTMLButtonElement>('#btn-conclude-tracing');
     const predictHint = heroCard.querySelector<HTMLElement>('#predict-gate-hint');
     const branchPredictButtons = heroCard.querySelectorAll<HTMLButtonElement>('.btn-predict-branch');
+    const btnStep1To2 = storyCallout.querySelector<HTMLButtonElement>('#btn-step1-to-step2');
+
+    // Listener Pita Alur Belajar & Tombol Bantuan Misi
+    workflowRibbon.querySelector('#btn-help-mission')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      const inlineBox = document.getElementById('tracing-workflow-mission-box');
+      if (inlineBox) {
+        inlineBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        inlineBox.classList.remove('mission-box-pulse');
+        void inlineBox.offsetWidth;
+        inlineBox.classList.add('mission-box-pulse');
+      } else {
+        this.showMissionGuidanceToast(this.tracingWizardStep, true);
+      }
+    });
+    workflowRibbon.querySelector('#wf-step-1')?.addEventListener('click', () => {
+      this.goToTracingStep(1, true, container);
+    });
+    workflowRibbon.querySelector('#wf-step-2')?.addEventListener('click', () => {
+      this.goToTracingStep(2, true, container);
+    });
+    workflowRibbon.querySelector('#wf-step-3')?.addEventListener('click', () => {
+      this.goToTracingStep(3, true, container);
+    });
+    workflowRibbon.querySelector('#wf-step-4')?.addEventListener('click', () => {
+      this.goToTracingStep(4, true, container);
+    });
+
+    btnStep1To2?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.goToTracingStep(2, true, container);
+    });
 
     const updatePredictionGate = () => {
       const hasPrediction = this.userPrediction !== null && this.isInputApplied;
+      const isCompleted = this.currentStepIndex >= (this.currentTraceResult?.steps.length || 1) - 1 && hasPrediction;
+
       if (btnStepPrev) btnStepPrev.disabled = !hasPrediction || this.currentStepIndex === 0;
       if (btnStepNext) btnStepNext.disabled = !hasPrediction || (this.currentStepIndex >= (this.currentTraceResult?.steps.length || 1) - 1);
       if (btnRunSim) btnRunSim.disabled = !hasPrediction;
 
+      if (btnConclude) {
+        btnConclude.disabled = !isCompleted;
+        btnConclude.className = `game-btn ${isCompleted ? 'game-btn-gold' : 'game-btn-secondary'}`;
+        btnConclude.innerHTML = `
+          ${renderPixelIcon('star', 13, isCompleted ? '#ffffff' : 'var(--text-muted)')}
+          <span>Lanjut: Tarik Kesimpulan Hasil Uji (Langkah 4)</span>
+          ${renderPixelIcon('arrow-right', 12, isCompleted ? '#ffffff' : 'var(--text-muted)')}
+        `;
+      }
+
       if (predictHint) {
         if (!this.isInputApplied) {
-          predictHint.innerHTML = `${renderPixelIcon('shield', 11, '#b45309')} Langkah 2 belum selesai: Tentukan nilai masukan di samping terlebih dahulu.`;
+          predictHint.innerHTML = `${renderPixelIcon('shield', 11, '#b45309')} Langkah 2A belum selesai: Tentukan nilai masukan di samping terlebih dahulu.`;
           predictHint.style.display = 'flex';
         } else if (!hasPrediction) {
           predictHint.innerHTML = `${renderPixelIcon('target', 11, '#b45309')} Nilai masukan siap (${this.currentInputValue}). Pilih salah satu dugaan cabang di atas untuk membuka Meja Kerja!`;
           predictHint.style.display = 'flex';
         } else {
-          predictHint.innerHTML = `${renderPixelIcon('check', 11, 'var(--success)')} Tebakan tercatat: Cabang <strong>${this.userPrediction}</strong>. Lanjutkan telusuri kode di Meja Kerja!`;
+          predictHint.innerHTML = `${renderPixelIcon('check', 11, 'var(--success)')} Dugaan tercatat: Cabang <strong>${this.userPrediction}</strong>. Lanjutkan telusuri kode di Meja Kerja!`;
           predictHint.style.display = 'flex';
         }
       }
@@ -4071,23 +5508,25 @@ export class UIManager {
       const wfStep3 = container.querySelector<HTMLElement>('#wf-step-3');
       const wfStep4 = container.querySelector<HTMLElement>('#wf-step-4');
 
+      const isStep1Done = this.isInputApplied || this.userPrediction !== null || this.tracingWizardStep > 1;
+      const isStep2Done = this.userPrediction !== null || this.tracingWizardStep > 2;
+      const isStep3Done = isCompleted || this.tracingWizardStep > 3;
+
       if (wfStep1) {
-        const isStep1Done = this.isInputApplied || this.userPrediction !== null;
-        wfStep1.classList.toggle('completed', isStep1Done);
-        wfStep1.classList.toggle('active', !isStep1Done);
+        wfStep1.classList.toggle('completed', isStep1Done && this.tracingWizardStep !== 1);
+        wfStep1.classList.toggle('active', this.tracingWizardStep === 1);
       }
       if (wfStep2) {
-        wfStep2.classList.toggle('completed', this.isInputApplied);
-        wfStep2.classList.toggle('active', !this.isInputApplied && document.activeElement === inputEl);
+        wfStep2.classList.toggle('completed', isStep2Done && this.tracingWizardStep !== 2);
+        wfStep2.classList.toggle('active', this.tracingWizardStep === 2);
       }
       if (wfStep3) {
-        wfStep3.classList.toggle('completed', this.userPrediction !== null);
-        wfStep3.classList.toggle('active', this.isInputApplied && this.userPrediction === null);
+        wfStep3.classList.toggle('completed', isStep3Done && this.tracingWizardStep !== 3);
+        wfStep3.classList.toggle('active', this.tracingWizardStep === 3);
       }
       if (wfStep4) {
-        const isFinished = this.currentStepIndex >= (this.currentTraceResult?.steps.length || 1) - 1 && hasPrediction;
-        wfStep4.classList.toggle('completed', isFinished);
-        wfStep4.classList.toggle('active', hasPrediction && !isFinished);
+        wfStep4.classList.toggle('completed', isCompleted && (this.progressionState?.stepTracingCompleted || false));
+        wfStep4.classList.toggle('active', this.tracingWizardStep === 4);
       }
 
       const watchInput = container.querySelector<HTMLElement>('#watch-val-input');
@@ -4115,7 +5554,7 @@ export class UIManager {
       const btnJump = heroCard.querySelector<HTMLButtonElement>('#btn-jump-to-workbench');
       if (btnJump) {
         if (this.userPrediction && this.isInputApplied) {
-          btnJump.innerHTML = `${renderPixelIcon('flask', 13, '#ffffff')} <span>Uji Dugaan: Cabang ${this.userPrediction} di Meja Kerja</span> ${renderPixelIcon('arrow-right', 12, '#ffffff')}`;
+          btnJump.innerHTML = `${renderPixelIcon('flask', 13, '#ffffff')} <span>Buktikan di Meja Kerja: Cabang ${this.userPrediction} (Langkah 3)</span> ${renderPixelIcon('arrow-right', 12, '#ffffff')}`;
           btnJump.style.display = 'inline-flex';
         } else {
           btnJump.style.display = 'none';
@@ -4167,8 +5606,7 @@ export class UIManager {
     const btnJump = heroCard.querySelector<HTMLButtonElement>('#btn-jump-to-workbench');
     btnJump?.addEventListener('click', () => {
       soundFx.playButtonBlip();
-      toggleHeroCard(true);
-      zoneWorkbench.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      this.goToTracingStep(3, true, container);
     });
 
     const handleApplyInput = () => {
@@ -4201,12 +5639,28 @@ export class UIManager {
       this.updateStepDisplay(container);
       updatePredictionGate();
       soundFx.playButtonBlip();
-      this.showRetroToast(`Masukan ${this.currentInputValue} ditetapkan! Lanjutkan ke Langkah 3: Tebak Alur.`, true);
+      this.showRetroToast(`Masukan ${this.currentInputValue} ditetapkan! Lanjutkan pilih dugaan cabang alur.`, true);
     };
 
     btnApply?.addEventListener('click', handleApplyInput);
     inputEl?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') handleApplyInput();
+    });
+
+    // Event Listener Rekomendasi Preset Nilai Uji Cabang (1-Tap Test Branch)
+    heroCard.querySelectorAll<HTMLButtonElement>('.btn-test-preset-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const valStr = chip.getAttribute('data-preset-val');
+        if (!valStr || !inputEl) return;
+        inputEl.value = valStr;
+        handleApplyInput();
+        const targetBranch = chip.getAttribute('data-target-branch');
+        if (targetBranch) {
+          this.userPrediction = targetBranch;
+          soundFx.playButtonBlip();
+          updatePredictionGate();
+        }
+      });
     });
 
     inputEl?.addEventListener('focus', () => {
@@ -4255,9 +5709,214 @@ export class UIManager {
       this.runFullSimulationAnimation(container);
     });
 
+    btnConclude?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.goToTracingStep(4, true, container);
+    });
+
     updatePredictionGate();
     this.updateStepDisplay(container);
     return container;
+  }
+
+  /**
+   * Memperbarui konten kartu aksi penutup (Langkah 4) dengan rekomendasi dinamis:
+   * - Jika masih ada kasus yang belum tuntas: memprioritaskan tombol lanjut ke kasus berikutnya.
+   * - Jika seluruh kasus telah selesai tuntas: mengaktifkan selebrasi ke Arena Tantangan Monster.
+   */
+  private updateNextStepCardContent(card: HTMLElement, container: HTMLElement | Document = document): void {
+    const cycleCap = this.isCycle2Unlocked ? 2 : 1;
+    const availableMods = CASE_MODULES.filter((m) => m.cycleRequired <= cycleCap);
+    const allCompleted = availableMods.every((m) => {
+      const p = this.allModuleProgress[m.id];
+      const branches = MODULE_BRANCHES[m.id] || [];
+      return (p?.testedBranches?.length || 0) >= branches.length || !!p?.isCompleted;
+    });
+
+    const isTracingDone = !!this.progressionState?.stepTracingCompleted;
+    const nextCase = this.getNextUncompletedCase();
+    const currentBranchDefs = MODULE_BRANCHES[this.activeModule.id] || [];
+    const currentProg = this.allModuleProgress[this.activeModule.id];
+    const currentTestedBranches = currentProg?.testedBranches || [];
+    const isCurrentCaseComplete = currentTestedBranches.length >= currentBranchDefs.length;
+    const currentScore = this.formativeScores?.tracingScore || 0;
+
+    let nextStepContentHtml = '';
+    if (allCompleted) {
+      nextStepContentHtml = `
+        <div style="flex: 1;">
+          <div class="eyebrow-label" style="color: var(--success); margin-bottom: 2px;">
+            ${renderPixelIcon('check', 12, 'var(--success)')} Seluruh ${availableMods.length} Kasus Berhasil Dituntaskan!
+          </div>
+          <div style="font-size: 12.5px; color: var(--text-primary); font-weight: 600; line-height: 1.5;">
+            Luar biasa! Seluruh jalur kondisi telah berhasil kamu buktikan dengan skor sempurna 100/100 dan 2 Bintang. Arena Tantangan Bug Monster kini siap dihadapi!
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button id="btn-retry-case" type="button" class="game-btn game-btn-secondary" style="min-height: 48px; padding: 0 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Uji nilai baru pada kasus ini">
+            ${renderPixelIcon('refresh', 12, 'currentColor')}
+            <span>Uji Nilai Lain</span>
+          </button>
+          <button id="btn-tracing-to-battle" type="button" class="game-btn game-btn-gold tracing-next-step-btn" style="min-height: 48px; font-size: 12px; font-weight: 700;">
+            ${renderPixelIcon('swords', 13, '#ffffff')}
+            <span>Lanjut ke Arena Tantangan Monster</span>
+            ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+          </button>
+        </div>
+      `;
+    } else if (nextCase) {
+      const nextCaseWeight = nextCase.weightPoints || 30;
+      nextStepContentHtml = `
+        <div style="flex: 1;">
+          <div class="eyebrow-label" style="color: ${isCurrentCaseComplete ? 'var(--success)' : 'var(--warning)'}; margin-bottom: 2px;">
+            ${renderPixelIcon(isCurrentCaseComplete ? 'check' : 'target', 12, isCurrentCaseComplete ? 'var(--success)' : 'var(--warning)')} ${isCurrentCaseComplete ? 'Kasus Selesai Tuntas!' : 'Uji Jalur Cabang Berhasil!'}
+          </div>
+          <div style="font-size: 12.5px; color: var(--text-primary); font-weight: 600; line-height: 1.5;">
+            ${isCurrentCaseComplete
+              ? `Seluruh cabang pada ${escapeHtml(this.activeModule.title)} teruji. Segera lanjutkan ke kasus berikutnya untuk melengkapi nilai formatifmu!`
+              : `Cabang pada ${escapeHtml(this.activeModule.title)} berhasil dibuktikan. Uji cabang kedua untuk meraih 2 Bintang penuh, atau lanjut ke kasus berikutnya!`
+            }
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button id="btn-next-case" type="button" class="game-btn game-btn-primary" style="min-height: 48px; padding: 0 16px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 8px;" title="Buka kasus berikutnya">
+            <span>Lanjut ke ${nextCase.id.toUpperCase()}: ${escapeHtml(nextCase.title)} (+${nextCaseWeight} Poin)</span>
+            ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+          </button>
+          <button id="btn-retry-case" type="button" class="game-btn game-btn-secondary" style="min-height: 48px; padding: 0 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Uji nilai baru atau uji cabang alternatif pada kasus ini">
+            ${renderPixelIcon('refresh', 12, 'currentColor')}
+            <span>${isCurrentCaseComplete ? 'Uji Nilai Lain' : 'Uji Cabang 2 di Kasus Ini'}</span>
+          </button>
+          <button id="btn-tracing-to-battle" type="button" class="game-btn game-btn-secondary tracing-next-step-btn" style="min-height: 48px; font-size: 11px; opacity: 0.85;" ${!isTracingDone ? 'disabled' : ''} title="Lewati ke Arena Tantangan (Perhatian: nilai telusur belum maksimal)">
+            ${renderPixelIcon('swords', 11, 'currentColor')}
+            <span>Lewati ke Tantangan (${currentScore}/100 Poin)</span>
+          </button>
+        </div>
+      `;
+    } else {
+      nextStepContentHtml = `
+        <div style="flex: 1;">
+          <div class="eyebrow-label" style="color: var(--success); margin-bottom: 2px;">
+            ${renderPixelIcon('check', 12, 'var(--success)')} Pengujian Terverifikasi
+          </div>
+          <div style="font-size: 12.5px; color: var(--text-primary); font-weight: 600; line-height: 1.5;">
+            Kasus aktif berhasil dibuktikan di Meja Kerja.
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <button id="btn-retry-case" type="button" class="game-btn game-btn-secondary" style="min-height: 48px; padding: 0 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;">
+            ${renderPixelIcon('refresh', 12, 'currentColor')}
+            <span>Uji Nilai Lain</span>
+          </button>
+          <button id="btn-tracing-to-battle" type="button" class="game-btn game-btn-gold tracing-next-step-btn" style="min-height: 48px;" ${!isTracingDone ? 'disabled' : ''}>
+            ${renderPixelIcon('swords', 13, '#ffffff')}
+            <span>Lanjut ke Arena Tantangan</span>
+            ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+          </button>
+        </div>
+      `;
+    }
+
+    card.innerHTML = nextStepContentHtml;
+
+    card.querySelector('#btn-next-case')?.addEventListener('click', async () => {
+      if (!nextCase) return;
+      soundFx.playButtonBlip();
+      this.activeModule = nextCase;
+      this.resetTracingToInitialState();
+      const rawProg = await StorageService.getModuleProgress(nextCase.id);
+      const prog: ModuleProgress = rawProg || {
+        testedBranches: [],
+        stars: 0,
+        isCompleted: false,
+        xpEarned: 0,
+        updatedAt: Date.now()
+      };
+      this.coverageView.update(prog, nextCase.id, this.formativeScores?.tracingScore || 0, this.isCycle2Unlocked);
+      this.render();
+      this.scrollToTop();
+      window.setTimeout(() => {
+        this.showMissionGuidanceToast(1);
+      }, 120);
+    });
+
+    card.querySelector('#btn-retry-case')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.userPrediction = null;
+      this.goToTracingStep(2, true, container instanceof HTMLElement ? container : undefined);
+    });
+
+    card.querySelector('#btn-tracing-to-battle')?.addEventListener('click', () => {
+      this.bypassTracingGuardOnce = true;
+      this.setScreen('BATTLE');
+    });
+  }
+
+  /**
+   * Sinkronisasi visual pada bilah Multi-Case Stepper di bagian atas
+   */
+  private updateCaseStepper(container: HTMLElement | Document = document): void {
+    const stepper = container.querySelector<HTMLElement>('#tracing-case-stepper');
+    if (!stepper) return;
+
+    const cycleCap = this.isCycle2Unlocked ? 2 : 1;
+    const availableModules = CASE_MODULES.filter((m) => m.cycleRequired <= cycleCap);
+    const activeModuleCount = availableModules.length;
+    let completedModuleCount = 0;
+    availableModules.forEach((mod) => {
+      const prog = this.allModuleProgress[mod.id];
+      const branchDefs = MODULE_BRANCHES[mod.id] || [];
+      const testedCount = prog?.testedBranches?.length || 0;
+      if (testedCount >= branchDefs.length || !!prog?.isCompleted) {
+        completedModuleCount++;
+      }
+    });
+
+    const summaryEl = stepper.querySelector<HTMLElement>('.tracing-case-stepper-summary strong');
+    if (summaryEl) {
+      summaryEl.textContent = `${completedModuleCount}/${activeModuleCount} Kasus`;
+    }
+
+    const cards = stepper.querySelectorAll<HTMLElement>('.tracing-case-card');
+    cards.forEach((card) => {
+      const caseId = card.getAttribute('data-case-id');
+      if (!caseId) return;
+      const mod = availableModules.find((m) => m.id === caseId);
+      if (!mod) return;
+
+      const isActive = mod.id === this.activeModule.id;
+      const branchDefs = MODULE_BRANCHES[mod.id] || [];
+      const prog = this.allModuleProgress[mod.id];
+      const testedBranches = prog?.testedBranches || [];
+      const testedCount = testedBranches.length;
+      const totalBranches = branchDefs.length;
+      const isDone = testedCount >= totalBranches || !!prog?.isCompleted;
+      const isPartial = testedCount > 0 && !isDone;
+      const defaultWeight = this.isCycle2Unlocked ? 20 : 30;
+      const weight = mod.weightPoints || defaultWeight;
+
+      card.classList.toggle('is-active', isActive);
+      card.classList.toggle('status-completed', isDone);
+      card.classList.toggle('status-partial', isPartial);
+      card.classList.toggle('status-pending', !isDone && !isPartial);
+
+      const statusEl = card.querySelector<HTMLElement>('.case-card-status');
+      if (statusEl) {
+        if (isDone) {
+          statusEl.style.color = 'var(--success)';
+          statusEl.style.background = 'rgba(21, 128, 61, 0.12)';
+          statusEl.innerHTML = `${renderPixelIcon('check', 11, 'var(--success)')} <span>${testedCount}/${totalBranches} Cabang Selesai (${weight} Poin)</span>`;
+        } else if (isPartial) {
+          statusEl.style.color = '#b45309';
+          statusEl.style.background = 'rgba(245, 158, 11, 0.14)';
+          statusEl.innerHTML = `${renderPixelIcon('target', 11, '#b45309')} <span>${testedCount}/${totalBranches} Cabang (Uji Cabang 2)</span>`;
+        } else {
+          statusEl.style.color = 'var(--text-muted)';
+          statusEl.style.background = 'var(--surface-code)';
+          statusEl.innerHTML = `${renderPixelIcon('refresh', 11, 'var(--text-muted)')} <span>0/${totalBranches} Cabang (${weight} Poin)</span>`;
+        }
+      }
+    });
   }
 
   private updatePredictionEvaluationCard(parent: HTMLElement | Document = document): void {
@@ -4316,6 +5975,57 @@ export class UIManager {
     }
 
     const isMatch = this.userPrediction === executedBranch;
+    const condBool = this.currentTraceResult?.conditionResult;
+    const condText = condBool ? 'BENAR (TRUE)' : 'SALAH (FALSE)';
+
+    const tableHtml = `
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border-retro);">
+        <div style="font-size: 11px; font-weight: 700; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+          ${renderPixelIcon('document', 11, 'var(--primary)')} Tabel Ringkasan Pembuktian Logika
+        </div>
+        <div class="tracing-eval-table-container">
+          <table style="width: 100%; border-collapse: collapse; font-size: 11.5px; text-align: left;">
+            <thead>
+              <tr style="background: rgba(15, 118, 110, 0.08); border-bottom: 1px solid var(--border-retro);">
+                <th style="padding: 6px 10px; font-weight: 700; color: var(--primary);">Kasus</th>
+                <th style="padding: 6px 10px; font-weight: 700; color: var(--text-primary);">Nilai Uji</th>
+                <th style="padding: 6px 10px; font-weight: 700; color: var(--warning-dark);">Dugaan Murid</th>
+                <th style="padding: 6px 10px; font-weight: 700; color: var(--text-primary);">Evaluasi Kondisi</th>
+                <th style="padding: 6px 10px; font-weight: 700; color: var(--primary);">Jalur Nyata</th>
+                <th style="padding: 6px 10px; font-weight: 700; color: ${isMatch ? 'var(--success)' : 'var(--warning-dark)'};">Hasil</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 8px 10px; font-weight: 700; font-family: var(--font-code);">${this.activeModule.id.toUpperCase()}</td>
+                <td style="padding: 8px 10px; font-family: var(--font-code); font-weight: 700;">${this.currentInputValue}</td>
+                <td style="padding: 8px 10px; font-family: var(--font-code); color: var(--warning-dark); font-weight: 700;">${this.userPrediction}</td>
+                <td style="padding: 8px 10px; font-family: var(--font-code);">${condText}</td>
+                <td style="padding: 8px 10px; font-family: var(--font-code); font-weight: 700; color: var(--primary);">${executedBranch}</td>
+                <td style="padding: 8px 10px; font-weight: 700; color: ${isMatch ? 'var(--success)' : 'var(--warning-dark)'};">${isMatch ? 'SESUAI' : 'BERBEDA'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 6px; font-style: italic;">
+          * Bandingkan hasil uji coba nyata komputer di atas dengan pemahaman aturan percabangan yang kamu rangkum di lembar LKPD!
+        </div>
+      </div>
+    `;
+
+    const scaffoldingHtml = !isMatch ? `
+      <div style="margin-top: 10px; padding: 10px 12px; background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 8px; font-size: 11.5px; line-height: 1.5;">
+        <div style="font-weight: 700; color: #b45309; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+          ${renderPixelIcon('bulb', 11, '#b45309')} Bantuan Refleksi Bertahap (Scaffolding):
+        </div>
+        <ul style="margin: 0; padding-left: 18px; color: var(--text-primary); display: flex; flex-direction: column; gap: 3px;">
+          <li><strong>Level 1 (Variabel):</strong> Cermati kembali nilai masukan uji: <code>${this.currentInputValue}</code>.</li>
+          <li><strong>Level 2 (Kondisi):</strong> Perhatikan aturan pembanding pada skenario modul <em>${escapeHtml(this.activeModule.title)}</em>.</li>
+          <li><strong>Level 3 (Alur Eksekusi):</strong> Karena kondisi dievaluasi bernilai <strong>${condText}</strong>, komputer mengambil jalur <strong>Cabang ${executedBranch}</strong> dan melewati cabang yang kamu duga.</li>
+        </ul>
+      </div>
+    ` : '';
+
     if (isMatch) {
       card.style.borderColor = 'rgba(15, 118, 110, 0.4)';
       card.style.background = '#f0fdf4';
@@ -4324,13 +6034,14 @@ export class UIManager {
           <div style="color: var(--success); flex-shrink: 0; margin-top: 2px;">
             ${renderPixelIcon('check', 16, 'var(--success)')}
           </div>
-          <div>
+          <div style="flex: 1;">
             <div style="font-size: 13px; font-weight: 700; color: var(--success); margin-bottom: 3px;">
               Dugaan Kamu Terbukti Tepat!
             </div>
             <div style="font-size: 12px; color: var(--text-primary); line-height: 1.5;">
-              Program membuktikan bahwa masukan <strong>${this.currentInputValue}</strong> menghasilkan evaluasi kondisi <strong>${this.currentTraceResult?.conditionResult ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}</strong> dan mengeksekusi cabang <strong>${executedBranch}</strong>. Logika percabangan kamu sangat tajam!
+              Program membuktikan bahwa masukan <strong>${this.currentInputValue}</strong> menghasilkan evaluasi kondisi <strong>${condText}</strong> dan mengeksekusi cabang <strong>${executedBranch}</strong>. Logika percabangan kamu sangat tajam!
             </div>
+            ${tableHtml}
           </div>
         </div>
       `;
@@ -4342,13 +6053,15 @@ export class UIManager {
           <div style="color: var(--warning-dark); flex-shrink: 0; margin-top: 2px;">
             ${renderPixelIcon('target', 16, 'var(--warning-dark)')}
           </div>
-          <div>
+          <div style="flex: 1;">
             <div style="font-size: 13px; font-weight: 700; color: var(--warning-dark); margin-bottom: 3px;">
               Dugaan Belum Sesuai dengan Hasil Evaluasi
             </div>
             <div style="font-size: 12px; color: var(--text-primary); line-height: 1.5;">
-              Kamu menduga program akan mengambil cabang <strong>${this.userPrediction}</strong>. Namun dengan nilai masukan <strong>${this.currentInputValue}</strong>, kondisi program dievaluasi bernilai <strong>${this.currentTraceResult?.conditionResult ? 'BENAR (TRUE)' : 'SALAH (FALSE)'}</strong> sehingga alur eksekusi mengambil cabang <strong>${executedBranch}</strong>. Cermati kembali baris kondisi pada kode atau diagram alir di atas!
+              Kamu menduga program akan mengambil cabang <strong>${this.userPrediction}</strong>. Namun dengan nilai masukan <strong>${this.currentInputValue}</strong>, kondisi program dievaluasi bernilai <strong>${condText}</strong> sehingga alur eksekusi mengambil cabang <strong>${executedBranch}</strong>. Cermati kembali baris kondisi pada kode atau diagram alir di atas!
             </div>
+            ${scaffoldingHtml}
+            ${tableHtml}
           </div>
         </div>
       `;
@@ -4637,10 +6350,12 @@ export class UIManager {
         }
       }
 
+      this.goToTracingStep(4, false);
       this.showRetroToast(
         `Dugaan belum tepat, tetapi penelusuran ini tetap tercatat. Cermati kembali kondisi pada kode, lalu coba lagi!`,
         false
       );
+      this.showMissionGuidanceToast(4);
       return;
     }
 
@@ -4649,8 +6364,10 @@ export class UIManager {
 
     // Mode Latihan: nilai resmi sudah dikunci, jangan tulis ke storage
     if (this.isTracingPracticeMode) {
+      this.goToTracingStep(4, false);
+      this.showMissionGuidanceToast(4);
       this.showRetroToast(
-        'Dugaan tepat! Namun sesi ini adalah Mode Latihan -- nilai formatif resmi kalian tidak berubah.',
+        'Dugaan tepat! Namun sesi ini adalah Mode Latihan -- nilai formatif resmimu tidak berubah.',
         true
       );
       return;
@@ -4695,33 +6412,17 @@ export class UIManager {
     this.coverageView.update(newProg, this.activeModule.id, this.formativeScores.tracingScore, this.isCycle2Unlocked);
     this.renderGlobalHeader();
 
+    this.goToTracingStep(4, false);
+    if (!(stars === 2 && oldProg.stars < 2)) {
+      this.showMissionGuidanceToast(4);
+    }
+
     // Pembaruan reaktif elemen DOM lokal tanpa render() penuh agar scroll murid tidak tereset
     const nextStepCard = this.overlayContainer.querySelector<HTMLElement>('.tracing-next-step-card');
     if (nextStepCard) {
-      const isTracingDone = !!this.progressionState?.stepTracingCompleted;
-      const btnBattle = nextStepCard.querySelector<HTMLButtonElement>('#btn-tracing-to-battle');
-      const eyebrow = nextStepCard.querySelector<HTMLElement>('.eyebrow-label');
-      const infoText = nextStepCard.querySelector<HTMLElement>('div[style*="font-size: 12.5px"]');
-
-      if (eyebrow) {
-        eyebrow.style.color = isTracingDone ? 'var(--success)' : 'var(--warning)';
-        eyebrow.innerHTML = `${renderPixelIcon(isTracingDone ? 'check' : 'lock', 12, isTracingDone ? 'var(--success)' : 'var(--warning)')} ${isTracingDone ? 'Misi Lab Telusur Terbukti' : 'Pembuktian Sedang Berjalan'}`;
-      }
-      if (infoText) {
-        infoText.textContent = isTracingDone
-          ? 'Alur percabangan berhasil dibuktikan di Meja Kerja. Arena Tantangan Bug Monster kini siap dihadapi!'
-          : 'Buktikan minimal 1 cabang logika (IF / ELSE) hingga baris selesai untuk membuka Arena Tantangan.';
-      }
-      if (btnBattle && isTracingDone) {
-        btnBattle.removeAttribute('disabled');
-        btnBattle.className = 'game-btn game-btn-gold tracing-next-step-btn';
-        btnBattle.innerHTML = `
-          ${renderPixelIcon('swords', 13, '#ffffff')}
-          <span>Lanjut ke Arena Tantangan Monster</span>
-          ${renderPixelIcon('arrow-right', 12, '#ffffff')}
-        `;
-      }
+      this.updateNextStepCardContent(nextStepCard, this.overlayContainer);
     }
+    this.updateCaseStepper(this.overlayContainer);
 
     // Deteksi kasus berikutnya yang belum selesai di siklus aktif
     const nextCase = this.getNextUncompletedCase();
@@ -4762,8 +6463,8 @@ export class UIManager {
       this.showCelebrationModal(
         'Semua Jalur Kondisi Berhasil Diuji!',
         nextCase
-          ? `Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada ${this.activeModule.title}. Tim kalian meraih 2 Bintang! Lanjutkan ke kasus berikutnya: ${nextCase.title}.`
-          : `Seluruh jalur kondisi logika sudah kalian uji secara tuntas pada ${this.activeModule.title}. Tim kalian berhasil meraih 2 Bintang sempurna!`,
+          ? `Seluruh jalur kondisi logika sudah kamu uji secara tuntas pada ${this.activeModule.title}. Kamu meraih 2 Bintang! Lanjutkan ke kasus berikutnya: ${nextCase.title}.`
+          : `Seluruh jalur kondisi logika sudah kamu uji secara tuntas pada ${this.activeModule.title}. Kamu berhasil meraih 2 Bintang sempurna!`,
         buttons
       );
     } else if (stars >= 1 && oldProg.stars < 1) {
@@ -4772,7 +6473,7 @@ export class UIManager {
         : 'Pengujian cabang berhasil dicatat! Bintang 1 berhasil diraih. Arena Tantangan kini telah terbuka.';
       this.showRetroToast(toastMsg, true);
     } else if (stars > oldProg.stars) {
-      this.showRetroToast('Capaian bintang bertambah! Nilai pemahaman formatif kalian meningkat.', true);
+      this.showRetroToast('Capaian bintang bertambah! Nilai pemahaman formatifmu meningkat.', true);
     }
   }
 
@@ -5132,8 +6833,8 @@ export class UIManager {
 
       const victoryTitle = isFirstClear ? 'Kemenangan Tempur Tercapai!' : 'Latihan Mandiri Selesai!';
       const victoryMessage = isFirstClear
-        ? 'Luar biasa! Bug Monster berhasil dikalahkan melalui 5 ronde evaluasi kondisi percabangan. Langkah 5: Evaluasi Mandiri kini telah terbuka! Skor tantangan tim tercatat 100.'
-        : 'Luar biasa! Bug Monster berhasil dikalahkan kembali dalam mode latihan. Pemahaman logika percabangan kalian semakin kokoh!';
+        ? 'Luar biasa! Bug Monster berhasil dikalahkan melalui 5 ronde evaluasi kondisi percabangan. Langkah 5: Evaluasi Mandiri kini telah terbuka! Skor tantangan kamu tercatat 100.'
+        : 'Luar biasa! Bug Monster berhasil dikalahkan kembali dalam mode latihan. Pemahaman logika percabangan kamu semakin kokoh!';
 
       this.showCelebrationModal(
         victoryTitle,
@@ -5337,7 +7038,7 @@ export class UIManager {
           'Pengujian seluruh jalur percabangan hanya perlu dilakukan jika program memiliki perulangan (looping)'
         ],
         correctIndex: 1,
-        explanation: 'Untuk memastikan program benar-benar andal, seluruh kemungkinan jalur keputusan harus diuji. Nilai masukan 50.000 baru menguji jalur Benar (IF). Agar pengujian tuntas, tim kalian juga perlu menguji jalur Salah (ELSE) dengan masukan di bawah 20.000 (misalnya 10.000).'
+        explanation: 'Untuk memastikan program benar-benar andal, seluruh kemungkinan jalur keputusan harus diuji. Nilai masukan 50.000 baru menguji jalur Benar (IF). Agar pengujian tuntas, kamu juga perlu menguji jalur Salah (ELSE) dengan masukan di bawah 20.000 (misalnya 10.000).'
       }
     ];
 
@@ -5380,8 +7081,8 @@ export class UIManager {
         </div>
         <div style="font-size: 13px; color: var(--text-primary); line-height: 1.5;">
           ${isPractice
-            ? '"Kalian sedang membuka evaluasi dalam mode latihan. Jawaban dapat dicoba kembali tanpa mengubah nilai formatif resmi."'
-            : '"Ayo uji pemahaman alur percabangan dengan menjawab 5 butir soal evaluasi mandiri berikut secara teliti!"'}
+        ? '"Kamu sedang membuka evaluasi dalam mode latihan. Jawaban dapat dicoba kembali tanpa mengubah nilai formatif resmi."'
+        : '"Ayo uji pemahaman alur percabangan dengan menjawab 5 butir soal evaluasi mandiri berikut secara teliti!"'}
         </div>
       </div>
     `;
@@ -5422,10 +7123,10 @@ export class UIManager {
       <!-- Opsi Jawaban Radio (Arcade Choice Cards) -->
       <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
         ${currentQ.options
-          .map((opt, idx) => {
-            const isSelected = this.selectedAnswer === idx;
-            const letter = String.fromCharCode(65 + idx);
-            return `
+        .map((opt, idx) => {
+          const isSelected = this.selectedAnswer === idx;
+          const letter = String.fromCharCode(65 + idx);
+          return `
               <div class="arcade-choice-card radio-option-card ${isSelected ? 'selected' : ''}" data-idx="${idx}">
                 <span class="arcade-key-badge ${isSelected ? 'selected' : ''}">${letter}</span>
                 <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">
@@ -5433,8 +7134,8 @@ export class UIManager {
                 </span>
               </div>
             `;
-          })
-          .join('')}
+        })
+        .join('')}
       </div>
 
       <!-- Kotak Petunjuk / Clue Box -->
@@ -5455,9 +7156,8 @@ export class UIManager {
           border: 2px solid ${this.selectedAnswer === currentQ.correctIndex ? 'var(--success)' : 'var(--danger)'};
           margin-bottom: 16px;
         ">
-          <div style="font-family: var(--font-code); font-weight: bold; font-size: 12.5px; color: ${
-            this.selectedAnswer === currentQ.correctIndex ? 'var(--success)' : 'var(--danger)'
-          }; margin-bottom: 8px;">
+          <div style="font-family: var(--font-code); font-weight: bold; font-size: 12.5px; color: ${this.selectedAnswer === currentQ.correctIndex ? 'var(--success)' : 'var(--danger)'
+        }; margin-bottom: 8px;">
             ${this.selectedAnswer === currentQ.correctIndex ? '[Jawaban Tepat! (+20 Poin)]' : '[Belum Tepat, Mari Cermati Pembahasan]'}
           </div>
 
@@ -5487,13 +7187,13 @@ export class UIManager {
       <!-- Tombol Aksi Pemeriksaan Jawaban -->
       <div>
         ${!this.answerSubmitted
-          ? `<button id="btn-submit-answer" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; font-size: 13.5px;">
+        ? `<button id="btn-submit-answer" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; font-size: 13.5px;">
               Periksa Jawaban
             </button>`
-          : `<button id="btn-next-question" type="button" class="game-btn game-btn-success" style="width: 100%; min-height: 48px; font-size: 13.5px; gap: 8px;">
+        : `<button id="btn-next-question" type="button" class="game-btn game-btn-success" style="width: 100%; min-height: 48px; font-size: 13.5px; gap: 8px;">
               ${this.currentQuestionIndex + 1 >= questions.length ? 'Selesaikan & Lihat Rekap Nilai' : 'Lanjut ke Soal Berikutnya'} ${renderPixelIcon('arrow-right', 13, '#ffffff')}
             </button>`
-        }
+      }
       </div>
     `;
 
@@ -5548,18 +7248,27 @@ export class UIManager {
           const currentScore = this.evaluasiCorrectCount * 20;
           const isFirst = updatedScores.evaluasiAttemptCount === 1;
 
+          const studentDisplayName = this.session?.studentName || this.session?.student1Name || 'Kamu';
           const modalTitle = isFirst ? 'Evaluasi Formatif Selesai!' : 'Latihan Evaluasi Selesai!';
           const modalMessage = isFirst
-            ? `Luar biasa! ${this.session?.pairId || 'Tim belajar kalian'} telah menyelesaikan 5 butir soal evaluasi pemahaman dengan skor ${currentScore} / 100. Nilai resmi formatif ini telah terkunci. Dasbor Capaian Belajar kini telah terbuka penuh!`
-            : `Latihan selesai! Skor perolehan pengerjaan kali ini adalah ${currentScore} / 100. Catatan: Nilai formatif resmi tim kalian (${updatedScores.evaluasiScore} / 100) dari percobaan pertama tetap tersimpan aman.`;
+            ? `Luar biasa! ${studentDisplayName} telah menyelesaikan 5 butir soal evaluasi pemahaman dengan skor ${currentScore} / 100. Nilai formatif resmi ini telah terkunci. Selanjutnya, silakan lanjutkan pengerjaan Posttest Pembelajaran (Google Form) atau periksa rekap di Dasbor Capaian Belajar!`
+            : `Latihan selesai! Skor perolehan pengerjaan kali ini adalah ${currentScore} / 100. Catatan: Nilai formatif resmimu (${updatedScores.evaluasiScore} / 100) dari percobaan pertama tetap tersimpan aman.`;
 
           this.showCelebrationModal(
             modalTitle,
             modalMessage,
             [
               {
-                label: 'Buka Dasbor Capaian & Rekap Nilai',
+                label: 'Lanjut ke Posttest Pembelajaran (Google Form)',
                 isPrimary: true,
+                action: () => {
+                  window.open(StorageService.getPosttestUrlSync(), '_blank', 'noopener,noreferrer');
+                  this.setScreen('PROGRES');
+                }
+              },
+              {
+                label: 'Buka Dasbor Capaian & Rekap Nilai',
+                isPrimary: false,
                 action: () => this.setScreen('PROGRES')
               },
               {
@@ -5591,9 +7300,17 @@ export class UIManager {
   // Layar 08: Dasbor Capaian Belajar, Lencana, & Pengiriman Hasil Progres
   // =================================================================
   private renderScreenProgres(): HTMLElement {
-    const card = document.createElement('div');
-    card.className = 'pixel-card';
-    card.style.cssText = `padding: 20px;`;
+    const container = document.createElement('div');
+    container.className = 'progres-page-container';
+    container.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      width: 100%;
+      max-width: 960px;
+      margin: 0 auto;
+      padding-bottom: 24px;
+    `;
 
     const formative = this.formativeScores || {
       tracingScore: 0,
@@ -5607,300 +7324,715 @@ export class UIManager {
       updatedAt: Date.now()
     };
     const currentDriveUrl = StorageService.getDriveUrlSync();
+    const currentAbsenStr = this.session?.studentAbsen ? String(this.session.studentAbsen).padStart(2, '0') : 'XX';
+    const currentCleanName = this.session?.studentName ? this.session.studentName.replace(/[^a-zA-Z0-9]/g, '') : 'NamaMurid';
+    const expectedFilename = `iobranch_Siklus${this.isCycle2Unlocked ? '2' : '1'}_Absen${currentAbsenStr}_${currentCleanName}.txt`;
 
-    card.innerHTML = `
-      <!-- Header Dasbor Progres -->
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-retro); padding-bottom: 10px;">
-        <span style="font-family: var(--font-pixel); font-size: 11px; color: var(--primary);">
-          Dasbor Capaian Belajar &amp; Lencana Prestasi
-        </span>
-        <span style="font-family: var(--font-code); font-size: 11px; color: var(--warning); font-weight: bold;">
-          [${this.session ? this.session.pairId : 'TIM BELUM TERDAFTAR'}]
-        </span>
-      </div>
+    const hasPriorWork = formative.finalScore > 0 || formative.isEvaluasiLocked || !!this.lastCloudUploadResult || !!this.progressionState?.teacherBypassMode;
+    if (hasPriorWork) {
+      this.maxUnlockedProgressStack = 3;
+    }
 
-      <!-- Kartu Profil Pasangan Belajar dengan Lambang Tim Pixel Art Resmi -->
-      <div class="pixel-card-alt" style="padding: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-        <div class="profile-team-badge-wrapper" style="
-          width: 72px;
-          height: 72px;
-          border-radius: 12px;
-          border: 2px solid var(--border-retro);
-          background: #ffffff;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
-          flex-shrink: 0;
-        ">
-          ${renderTeamSymbolPixelArt(this.session ? this.session.teamSymbol : 'algoritma', 42)}
-          <span style="font-family: var(--font-pixel); font-size: 7.5px; color: var(--primary); margin-top: 3px;">
-            ${(this.session?.teamSymbol || 'TIM').toUpperCase()}
+    const activeModules = CASE_MODULES.filter(m => m.cycleRequired === 1 || this.isCycle2Unlocked);
+    const completedCasesCount = activeModules.filter(m => {
+      const prog = this.allModuleProgress[m.id];
+      return (prog?.testedBranches?.length || 0) >= 1 || !!prog?.isCompleted;
+    }).length;
+
+    container.innerHTML = `
+      <!-- 1. Header & Dossier Profil Pembelajaran Murid -->
+      <div class="tactile-card" style="padding: 18px 20px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
+          <div>
+            <span class="eyebrow-label" style="color: var(--primary); margin-bottom: 3px; display: block;">
+              Portofolio Belajar Murid • Informatika Kelas X-10
+            </span>
+            <h1 style="font-size: 16.5px; font-weight: 700; color: var(--text-primary); margin: 3px 0 2px; letter-spacing: 0.2px;">
+              Dasbor Capaian Belajar &amp; Lencana Prestasi
+            </h1>
+            <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.5;">
+              Rekapitulasi nilai formatif 3 pilar, portofolio kasus logika, dan evaluasi hasil belajar resmi.
+            </p>
+          </div>
+          <span style="font-family: var(--font-code); font-size: 11px; color: var(--warning); font-weight: bold; padding: 4px 8px; background: rgba(217, 119, 6, 0.08); border-radius: 6px; border: 1px solid rgba(217, 119, 6, 0.2);">
+            [${this.session ? (this.session.studentAbsen ? `Absen ${String(this.session.studentAbsen).padStart(2, '0')}` : this.session.pairId) : 'PROFIL BELUM TERDAFTAR'}]
           </span>
         </div>
-        <div style="flex: 1; min-width: min(100%, 220px);">
-          <div style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
-            ${this.session ? `${escapeHtml(this.session.pairId)} (${escapeHtml(this.session.student1Name)} &amp; ${escapeHtml(this.session.student2Name)})` : 'Tim Belajar Murid'}
-          </div>
-          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span>Status: <strong style="color: ${formative.finalScore >= 75 ? 'var(--success)' : 'var(--warning-dark)'};">${formative.finalScore >= 75 ? 'Tuntas Memenuhi KKM' : 'Sedang Berproses'}</strong></span>
-            <span style="color: var(--border-retro);">|</span>
-            <span style="display: inline-flex; align-items: center; gap: 6px;">
-              Lambang Tim:
-              <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; background: #ffffff; border: 1.5px solid var(--border-retro); border-radius: 5px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.06);">
-                ${renderTeamSymbolPixelArt(this.session ? this.session.teamSymbol : 'algoritma', 18)}
-                <strong style="font-family: var(--font-pixel); font-size: 9px; color: var(--primary);">${this.session ? this.session.teamSymbol : 'Algoritma'}</strong>
-              </span>
+
+        <!-- Kartu Identitas & Status KKM -->
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+          <div class="profile-team-badge-wrapper" style="
+            width: 68px;
+            height: 68px;
+            border-radius: 12px;
+            border: 2px solid var(--border-retro);
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+            flex-shrink: 0;
+          ">
+            ${renderTeamSymbolPixelArt(this.session ? this.session.teamSymbol : 'algoritma', 38)}
+            <span style="font-family: var(--font-pixel); font-size: 7px; color: var(--primary); margin-top: 2px;">
+              ${(this.session?.teamSymbol || 'AVATAR').toUpperCase()}
             </span>
           </div>
-          <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--primary); font-family: var(--font-code);">
-            <span style="font-weight: 700;">Nilai Formatif Akhir</span>
-            <span style="font-weight: 800;">${formative.finalScore} / 100</span>
-          </div>
-          <div style="width: 100%; height: 10px; background-color: var(--surface-panel-alt); border-radius: 3px; overflow: hidden; border: 1px solid var(--border-retro);">
-            <div style="width: ${formative.finalScore}%; height: 100%; background-color: var(--primary); transition: width 0.3s ease;"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Kartu Rekapitulasi Nilai Formatif 3 Pilar (Skala 1–100) -->
-      <div class="pixel-card-alt" style="padding: 14px 16px; margin-bottom: 18px; border: 1px solid var(--border-retro);">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
-          <span style="font-family: var(--font-pixel); font-size: 10px; color: var(--primary);">
-            Rekap Nilai Formatif Pembelajaran (Skala 1–100)
-          </span>
-          <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: ${formative.isEvaluasiLocked ? 'var(--success)' : 'var(--warning)'}; background: ${formative.isEvaluasiLocked ? 'rgba(21, 128, 61, 0.08)' : 'rgba(217, 119, 6, 0.08)'}; border: 1px solid ${formative.isEvaluasiLocked ? 'rgba(21, 128, 61, 0.2)' : 'rgba(217, 119, 6, 0.2)'};">
-            ${formative.isEvaluasiLocked ? 'Penilaian Resmi Terkunci' : 'Sesi Sedang Berjalan'}
-          </span>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 4px;">
-          <!-- Pilar 1: Telusur -->
-          <div class="tactile-card" style="padding: 12px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
-            <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">1. Lab Telusur</div>
-            <div style="font-family: var(--font-code); font-size: 20px; font-weight: 800; color: var(--primary);">${formative.tracingScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
-            <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 2px;">${StorageService.getTracingStars(formative.tracingScore, this.isCycle2Unlocked)} dari 2 Bintang</div>
-          </div>
-
-          <!-- Pilar 2: Tantangan -->
-          <div class="tactile-card" style="padding: 12px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
-            <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">2. Tantangan Tempur</div>
-            <div style="font-family: var(--font-code); font-size: 20px; font-weight: 800; color: var(--warning);">${formative.battleScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
-            <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 2px;">5 Ronde Pertarungan</div>
-          </div>
-
-          <!-- Pilar 3: Evaluasi -->
-          <div class="tactile-card" style="padding: 12px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
-            <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">3. Evaluasi Mandiri</div>
-            <div style="font-family: var(--font-code); font-size: 20px; font-weight: 800; color: var(--accent);">${formative.evaluasiScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
-            <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 2px;">5 Soal Konseptual</div>
-          </div>
-
-          <!-- Rata-rata Nilai Formatif Akhir -->
-          <div class="tactile-card" style="padding: 12px 10px; text-align: center; border: 1.5px solid var(--primary); border-radius: 10px; background: rgba(15, 118, 110, 0.04);">
-            <div style="font-size: 11px; color: var(--primary); font-weight: 700; margin-bottom: 4px;">Nilai Formatif Akhir</div>
-            <div style="font-family: var(--font-code); font-size: 22px; font-weight: 900; color: var(--primary);">${formative.finalScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
-            <div style="font-size: 9.5px; color: var(--text-secondary); margin-top: 2px;">Rata-rata 3 Pilar</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Bilah Tab Navigasi Dasbor Progres (Responsif Penuh Mobile 360px - Zero Hidden Tab) -->
-      <div class="progress-nav-tabs">
-        <button id="tab-btn-badges" type="button" class="game-btn progress-nav-tab-btn ${this.activeProgressTab === 'BADGES' ? 'game-btn-primary' : 'game-btn-secondary'}">
-          ${renderPixelIcon('trophy', 12, 'currentColor')}
-          <span class="progress-tab-label-full">Lencana Pencapaian</span>
-          <span class="progress-tab-label-short">Lencana</span>
-        </button>
-        <button id="tab-btn-modules" type="button" class="game-btn progress-nav-tab-btn ${this.activeProgressTab === 'MODULES' ? 'game-btn-primary' : 'game-btn-secondary'}">
-          ${renderPixelIcon('book', 12, 'currentColor')}
-          <span class="progress-tab-label-full">Materi &amp; Kasus</span>
-          <span class="progress-tab-label-short">Materi</span>
-        </button>
-        <button id="tab-btn-export" type="button" class="game-btn progress-nav-tab-btn ${this.activeProgressTab === 'EXPORT' ? 'game-btn-primary' : 'game-btn-secondary'}">
-          ${renderPixelIcon('drive', 12, 'currentColor')}
-          <span class="progress-tab-label-full">Kirim Hasil Progres</span>
-          <span class="progress-tab-label-short">Kirim Progres</span>
-        </button>
-      </div>
-
-      <!-- Konten Tab Aktif -->
-      <div id="tab-content-area">
-        ${this.activeProgressTab === 'BADGES'
-        ? (() => {
-          const hasCompletedAny = Object.values(this.allModuleProgress).some((p) => p.isCompleted);
-          const isLencana2Unlocked = (this.allModuleProgress['m01']?.stars || 0) >= 2;
-          return `
-          <!-- Tampilan 3 Lencana Prestasi Berdampingan Sesuai Screen 08 -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
-            <!-- Lencana 1: Mengenal If-Else -->
-            <div style="padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
-              <img src="/assets/images/badge_gold.svg" alt="Lencana Emas" style="width: 68px; height: 68px; margin-bottom: 12px; ${!hasCompletedAny ? 'opacity: 0.5; filter: grayscale(0.8);' : ''}" />
-              <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
-                Mengenal If-Else
-              </div>
-              <div style="margin-bottom: 8px;">
-                <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: ${hasCompletedAny ? 'var(--success)' : 'var(--text-muted)'}; background: ${hasCompletedAny ? 'rgba(21, 128, 61, 0.08)' : 'rgba(0,0,0,0.04)'}; border: 1px solid ${hasCompletedAny ? 'rgba(21, 128, 61, 0.2)' : 'rgba(28, 25, 23, 0.1)'}; padding: 3px 8px; border-radius: 6px;">
-                  <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
-                  ${hasCompletedAny ? 'TERBUKA • Tuntas' : 'TERKUNCI • Selesaikan 1 Modul'}
-                </span>
-              </div>
-              <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0;">
-                Tuntas mempelajari konsep dasar percabangan logika dan evaluasi kondisi boolean.
-              </p>
+          <div style="flex: 1; min-width: min(100%, 220px);">
+            <div style="font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px;">
+              ${this.session
+                ? (this.session.studentName
+                  ? `Absen ${String(this.session.studentAbsen || 0).padStart(2, '0')} • ${escapeHtml(this.session.studentName)}`
+                  : `${escapeHtml(this.session.pairId)} (${escapeHtml(this.session.student1Name)} &amp; ${escapeHtml(this.session.student2Name)})`
+                )
+                : 'Profil Belajar Murid'
+              }
             </div>
-
-            <!-- Lencana 2: Penjelajah Logika -->
-            <div style="padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
-              <img src="/assets/images/badge_compass.svg" alt="Lencana Kompas" style="width: 68px; height: 68px; margin-bottom: 12px; ${!isLencana2Unlocked ? 'opacity: 0.5; filter: grayscale(0.8);' : ''}" />
-              <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
-                Penjelajah Logika
-              </div>
-              <div style="margin-bottom: 8px;">
-                <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: ${isLencana2Unlocked ? 'var(--primary)' : 'var(--text-muted)'}; background: ${isLencana2Unlocked ? 'rgba(15, 118, 110, 0.08)' : 'rgba(0,0,0,0.04)'}; border: 1px solid ${isLencana2Unlocked ? 'rgba(15, 118, 110, 0.2)' : 'rgba(28, 25, 23, 0.1)'}; padding: 3px 8px; border-radius: 6px;">
-                  <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
-                  ${isLencana2Unlocked ? 'TERBUKA • Kasus 1 Tuntas Bintang 2' : 'TERKUNCI • Tuntaskan Kasus 1 (Bintang 2)'}
-                </span>
-              </div>
-              <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0;">
-                Berhasil menguji semua jalur kondisi kode (IF dan ELSE) pada Kasus 1.
-              </p>
-            </div>
-
-            <!-- Lencana 3: Master Kondisi -->
-            <div style="padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.3)' : 'var(--border-subtle)'}; border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
-              <img src="/assets/images/badge_lock.svg" alt="Lencana Gembok" style="width: 68px; height: 68px; margin-bottom: 12px; ${!this.isCycle2Unlocked ? 'opacity: 0.7;' : ''}" />
-              <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
-                Master Kondisi
-              </div>
-              <div style="margin-bottom: 8px;">
-                <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--text-muted)'}; background: ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.08)' : 'rgba(0,0,0,0.04)'}; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.25)' : 'rgba(28, 25, 23, 0.1)'}; padding: 3px 8px; border-radius: 6px;">
-                  <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
-                  ${this.isCycle2Unlocked ? 'TERBUKA • Siklus 2' : 'TERKUNCI • Modul Siklus 2'}
-                </span>
-              </div>
-              <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px;">
-                Selesaikan kasus percabangan bertingkat dan operator logika ganda di Siklus 2.
-              </p>
-              ${!this.isCycle2Unlocked ? `
-                <button id="btn-token-progress" type="button" class="game-btn game-btn-gold" style="font-size: 10.5px; padding: 6px 12px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;">
-                  ${renderPixelIcon('lock', 11, '#ffffff')} Masukkan Token
-                </button>
-              ` : ''}
-            </div>
-          </div>
-        `;
-        })()
-        : this.activeProgressTab === 'MODULES'
-          ? `
-          <!-- Tampilan Modul Kasus & Status Bintang -->
-          <div style="display: flex; flex-direction: column; gap: 10px;">
-            ${CASE_MODULES.map((m, idx) => {
-            const isLocked = m.cycleRequired === 2 && !this.isCycle2Unlocked;
-            const prog = this.allModuleProgress[m.id];
-            const stars = prog?.stars || 0;
-            let weight = 0;
-            if (this.isCycle2Unlocked) {
-              weight = idx === 0 ? 15 : (idx === 1 ? 15 : (idx === 2 ? 20 : 25));
-            } else {
-              weight = idx === 0 ? 30 : (idx === 1 ? 30 : (idx === 2 ? 40 : 0));
-            }
-            const isDone = (prog?.testedBranches?.length || 0) >= 1 || !!prog?.isCompleted;
-            return `
-              <div class="pixel-card-alt" style="padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div>
-                  <div style="font-family: var(--font-pixel); font-size: 10px; color: ${isLocked ? 'var(--text-muted)' : 'var(--primary)'}; margin-bottom: 2px;">
-                    ${isLocked ? '[TERKUNCI] ' : ''}MODUL ${idx + 1}: ${m.title}
-                  </div>
-                  <div style="font-size: 12px; color: var(--text-secondary);">
-                    ${isLocked ? 'Siklus 2: Memerlukan Token Kelas dari Guru' : `Bobot: <strong>${weight} Poin</strong> • Status: <span style="color: ${isDone ? 'var(--success)' : 'var(--text-muted)'}; font-weight: 600;">${isDone ? 'Tuntas Diselesaikan' : 'Belum Diuji'}</span>`}
-                  </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  ${!isLocked ? `
-                  <span style="display: inline-flex; align-items: center; gap: 3px;">
-                    ${renderPixelIcon('star', 12, stars >= 1 ? 'var(--warning)' : 'var(--text-muted)')}
-                    ${renderPixelIcon('star', 12, stars >= 2 ? 'var(--warning)' : 'var(--text-muted)')}
-                  </span>
-                  <button type="button" class="game-btn game-btn-secondary btn-open-module-case" data-id="${m.id}" style="font-size: 11px; padding: 6px 12px; min-height: 40px;">
-                    Buka Kasus
-                  </button>
-                  ` : `
-                  <button type="button" class="game-btn game-btn-gold btn-token-module-case" data-id="${m.id}" style="font-size: 11px; padding: 6px 12px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px;">
-                    ${renderPixelIcon('lock', 11, '#ffffff')} Masukkan Token
-                  </button>
-                  `}
-                </div>
-              </div>
-            `;
-          }).join('')}
-          </div>
-        `
-          : `
-          <!-- Tampilan Pengiriman Hasil Progres & Google Drive Guru -->
-          <div class="tactile-card" style="padding: 20px; background: #ffffff; border: 1px solid var(--border-retro); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 6px 16px -4px rgba(28, 25, 23, 0.05);">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
-              <div style="font-family: var(--font-pixel); font-size: 11px; color: var(--primary);">
-                Kirim Hasil Progres Belajar
-              </div>
-              <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2);">
-                Folder Google Drive Siklus ${this.isCycle2Unlocked ? '2' : '1'}
+            <div style="font-size: 11.5px; color: var(--text-secondary); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <span>Status: <strong style="color: ${formative.finalScore >= 75 ? 'var(--success)' : 'var(--warning-dark)'};">${formative.finalScore >= 75 ? 'Tuntas Memenuhi KKM (≥75)' : 'Sedang Berproses (KKM: 75)'}</strong></span>
+              <span style="color: var(--border-retro);">|</span>
+              <span style="display: inline-flex; align-items: center; gap: 4px;">
+                ${this.lastCloudUploadResult?.success
+                  ? `<span style="color: var(--success); font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">${renderPixelIcon('check', 11, 'var(--success)')} Laporan Terkirim</span>`
+                  : `<span style="color: var(--text-muted); display: inline-flex; align-items: center; gap: 4px;">${renderPixelIcon('save', 11, 'var(--text-muted)')} Tersimpan Lokal</span>`
+                }
               </span>
             </div>
-            
-            <p style="font-size: 12.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.6;">
-              Unduh berkas rekap kemajuan belajar formatif tim kalian dalam format teks (.txt), lalu kirimkan berkas tersebut ke folder Google Drive Guru untuk penilaian formatif kelas.
-            </p>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 4px; color: var(--primary); font-family: var(--font-code);">
+              <span style="font-weight: 700;">Nilai Formatif Akhir</span>
+              <span style="font-weight: 800;">${formative.finalScore} / 100</span>
+            </div>
+            <div style="width: 100%; height: 8px; background-color: var(--surface-panel-alt); border-radius: 4px; overflow: hidden; border: 1px solid var(--border-retro);">
+              <div style="width: ${Math.min(100, Math.max(0, formative.finalScore))}%; height: 100%; background: linear-gradient(90deg, var(--primary) 0%, #10B981 100%); transition: width 0.3s ease;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-            <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
-              <div style="font-size: 11px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
-                Petunjuk Pengiriman Dua Langkah:
+      <!-- 2. Bilah Stepper Progres Portofolio (Progressive Disclosure) -->
+      <div class="progres-stepper-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <span style="font-family: var(--font-code); font-size: 11px; font-weight: 700; color: var(--primary); display: inline-flex; align-items: center; gap: 6px;">
+            ${renderPixelIcon('target', 12, 'var(--primary)')} Tahapan Portofolio Belajar
+          </span>
+          <span id="progres-progress-text" style="font-family: var(--font-code); font-size: 10.5px; font-weight: 700; color: var(--text-secondary);">
+            Tahap ${this.activeProgressStack} dari 3 • ${hasPriorWork || this.maxUnlockedProgressStack === 3 ? '100% Siap' : `${Math.round((this.activeProgressStack / 3) * 100)}% Ditinjau`}
+          </span>
+        </div>
+        <div class="progres-progress-track">
+          <div id="progres-progress-fill" class="progres-progress-fill" style="width: ${hasPriorWork || this.maxUnlockedProgressStack === 3 ? '100%' : `${(this.activeProgressStack / 3) * 100}%`};"></div>
+        </div>
+        <div class="progres-stepper-pills">
+          <button id="progres-stepper-pill-1" type="button" class="progres-stepper-pill ${this.activeProgressStack === 1 ? 'active' : (this.maxUnlockedProgressStack >= 2 ? 'completed' : '')}">
+            ${renderPixelIcon('chart', 12, 'currentColor')} <span>1. Nilai 3 Pilar</span>
+          </button>
+          <button id="progres-stepper-pill-2" type="button" class="progres-stepper-pill ${this.activeProgressStack === 2 ? 'active' : (this.maxUnlockedProgressStack >= 3 ? 'completed' : (this.maxUnlockedProgressStack < 2 && !hasPriorWork ? 'locked' : ''))}">
+            ${renderPixelIcon(this.maxUnlockedProgressStack >= 2 || hasPriorWork ? 'trophy' : 'lock', 12, 'currentColor')} <span>2. Kasus &amp; Lencana</span>
+          </button>
+          <button id="progres-stepper-pill-3" type="button" class="progres-stepper-pill ${this.activeProgressStack === 3 ? 'active' : (this.maxUnlockedProgressStack >= 3 ? (hasPriorWork ? 'completed' : '') : (hasPriorWork ? '' : 'locked'))}">
+            ${renderPixelIcon(this.maxUnlockedProgressStack >= 3 || hasPriorWork ? 'drive' : 'lock', 12, 'currentColor')} <span>3. Evaluasi &amp; Kirim</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. Tumpukan Kartu Progres (Progressive Disclosure Stacks) -->
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+
+        <!-- STACK 1: Rekap Nilai Formatif 3 Pilar -->
+        <div id="progres-stack-card-1" class="progres-stack-card ${this.activeProgressStack === 1 ? 'active' : ''}">
+          <button id="progres-stack-header-1" type="button" class="progres-stack-header" aria-expanded="${this.activeProgressStack === 1}">
+            <div class="progres-stack-title-box">
+              <span id="progres-stack-badge-1" class="progres-stack-num-badge">1</span>
+              <div>
+                <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
+                  Rekap Nilai Formatif 3 Pilar (Skala 1–100)
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary);">
+                  Capaian hasil belajar dari Lab Telusur, Tantangan Tempur, dan Evaluasi Mandiri.
+                </div>
               </div>
-              <ol style="margin: 0; padding-left: 18px; font-size: 11.5px; color: var(--text-secondary); line-height: 1.6;">
-                <li>Klik tombol <strong>Unduh Rekap &amp; Buka Google Drive</strong> di bawah untuk mengunduh berkas laporan teks (.txt) sekaligus membuka folder tugas guru.</li>
-                <li>Pada tab Google Drive yang terbuka, seret atau unggah berkas <em>iobranch_rekap_...txt</em> yang baru saja terunduh ke dalam folder tersebut.</li>
-              </ol>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: ${formative.isEvaluasiLocked ? 'var(--success)' : 'var(--warning-dark)'}; background: ${formative.isEvaluasiLocked ? 'rgba(21, 128, 61, 0.08)' : 'rgba(217, 119, 6, 0.08)'}; border: 1px solid ${formative.isEvaluasiLocked ? 'rgba(21, 128, 61, 0.2)' : 'rgba(217, 119, 6, 0.2)'};">
+                ${formative.isEvaluasiLocked ? 'Penilaian Resmi Terkunci' : 'Sesi Sedang Berjalan'}
+              </span>
+              <span id="progres-stack-chevron-1" class="progres-stack-chevron ${this.activeProgressStack === 1 ? 'expanded' : ''}">
+                ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+              </span>
+            </div>
+          </button>
+
+          <div id="progres-stack-body-1" class="progres-stack-body" style="display: ${this.activeProgressStack === 1 ? 'block' : 'none'};">
+            <!-- Grid Rekap Nilai 3 Pilar -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px;">
+              <!-- Pilar 1: Telusur -->
+              <div class="tactile-card" style="padding: 14px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
+                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">1. Lab Telusur</div>
+                <div style="font-family: var(--font-code); font-size: 22px; font-weight: 800; color: var(--primary);">${formative.tracingScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
+                <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 3px;">${StorageService.getTracingStars(formative.tracingScore, this.isCycle2Unlocked)} dari 2 Bintang</div>
+              </div>
+
+              <!-- Pilar 2: Tantangan Tempur -->
+              <div class="tactile-card" style="padding: 14px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
+                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">2. Tantangan Tempur</div>
+                <div style="font-family: var(--font-code); font-size: 22px; font-weight: 800; color: var(--warning);">${formative.battleScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
+                <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 3px;">5 Ronde Simulasi Kota</div>
+              </div>
+
+              <!-- Pilar 3: Evaluasi Mandiri -->
+              <div class="tactile-card" style="padding: 14px 10px; text-align: center; border: 1px solid var(--border-subtle); border-radius: 10px; background: #ffffff;">
+                <div style="font-size: 11px; color: var(--text-secondary); font-weight: 600; margin-bottom: 4px;">3. Evaluasi Mandiri</div>
+                <div style="font-family: var(--font-code); font-size: 22px; font-weight: 800; color: var(--accent);">${formative.evaluasiScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
+                <div style="font-size: 9.5px; color: var(--text-muted); margin-top: 3px;">5 Soal Konseptual</div>
+              </div>
+
+              <!-- Rata-rata Nilai Formatif Akhir -->
+              <div class="tactile-card" style="padding: 14px 10px; text-align: center; border: 1.5px solid var(--primary); border-radius: 10px; background: rgba(15, 118, 110, 0.04);">
+                <div style="font-size: 11px; color: var(--primary); font-weight: 700; margin-bottom: 4px;">Nilai Formatif Akhir</div>
+                <div style="font-family: var(--font-code); font-size: 24px; font-weight: 900; color: var(--primary);">${formative.finalScore} <span style="font-size: 11px; color: var(--text-muted);">/ 100</span></div>
+                <div style="font-size: 9.5px; color: var(--text-secondary); margin-top: 3px;">Rata-rata 3 Pilar (Terbobot)</div>
+              </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 10px;">
-              <button id="btn-export-drive" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; gap: 8px; font-size: 13px; font-weight: 700;">
-                ${renderPixelIcon('drive', 15, '#ffffff')} Unduh Rekap &amp; Buka Google Drive Guru
-              </button>
-              <a id="btn-open-drive-folder" href="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-gold" style="width: 100%; min-height: 44px; font-size: 12px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Halaman Upload Folder Google Drive Guru">
-                ${renderPixelIcon('drive', 14, '#ffffff')} Buka Halaman Upload Google Drive
-              </a>
-              <button id="btn-download-txt" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 12px; gap: 8px;">
-                ${renderPixelIcon('document', 14, 'currentColor')} Hanya Unduh Berkas Laporan Teks (.txt)
+            <!-- Analisis Diagnostik Pembelajaran -->
+            <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px 14px; margin-bottom: 6px;">
+              <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                ${renderPixelIcon('bulb', 13, 'var(--primary)')} Analisis Capaian Pembelajaran
+              </div>
+              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 0;">
+                ${formative.finalScore >= 75
+                  ? 'Capaian formatif Anda telah melampaui Kriteria Ketercapaian Tujuan Pembelajaran (KKTP/KKM: 75). Pemahaman Anda dalam menelusuri logika kondisi percabangan dan menyelesaikan skenario kota telah terbukti solid.'
+                  : (formative.finalScore > 0
+                    ? `Nilai formatif Anda saat ini adalah ${formative.finalScore}/100. Anda masih dapat meningkatkan capaian dengan menyelesaikan kasus yang belum tuntas di Meja Kerja atau mengulang tantangan di Arena Tempur.`
+                    : 'Anda baru memulai sesi pembelajaran. Buka Meja Kerja Lab Telusur Kode untuk menelusuri kasus-kasus logika pertama Anda dan mengumpulkan poin formatif.'
+                  )
+                }
+              </p>
+            </div>
+
+            <!-- Tombol Lanjut ke Stack 2 -->
+            <div class="progres-advance-btn-box">
+              <button id="btn-advance-progres-stack-1" type="button" class="game-btn game-btn-primary" style="font-size: 12px; min-height: 44px; padding: 0 18px; display: inline-flex; align-items: center; gap: 8px;">
+                <span>Paham Capaian, Periksa Bukti Kasus &amp; Lencana</span>
+                ${renderPixelIcon('arrow-right', 12, '#ffffff')}
               </button>
             </div>
           </div>
-        `
-      }
+        </div>
+
+        <!-- STACK 2: Portofolio Kasus & Lencana Prestasi -->
+        <div id="progres-stack-card-2" class="progres-stack-card ${this.activeProgressStack === 2 ? 'active' : ''}">
+          <button id="progres-stack-header-2" type="button" class="progres-stack-header" aria-expanded="${this.activeProgressStack === 2}">
+            <div class="progres-stack-title-box">
+              <span id="progres-stack-badge-2" class="progres-stack-num-badge">2</span>
+              <div>
+                <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
+                  Portofolio Kasus &amp; Lencana Prestasi
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary);">
+                  Rekam jejak 5 modul kasus malfungsi Kota Harmoni dan perolehan 3 lencana otentik.
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2);">
+                ${completedCasesCount} dari ${activeModules.length} Kasus Tuntas
+              </span>
+              <span id="progres-stack-chevron-2" class="progres-stack-chevron ${this.activeProgressStack === 2 ? 'expanded' : ''}">
+                ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+              </span>
+            </div>
+          </button>
+
+          <div id="progres-stack-body-2" class="progres-stack-body" style="display: ${this.activeProgressStack === 2 ? 'block' : 'none'};">
+            <!-- Sub-toggle Tabs Navigasi Kasus vs Lencana -->
+            <div class="progres-sub-toggle-tabs">
+              <button id="btn-progres-sub-modules" type="button" class="game-btn ${this.progressPortfolioSubTab === 'MODULES' ? 'game-btn-primary' : 'game-btn-secondary'} progres-sub-toggle-btn">
+                ${renderPixelIcon('book', 12, 'currentColor')}
+                <span>Modul Kasus Logika (${CASE_MODULES.length})</span>
+              </button>
+              <button id="btn-progres-sub-badges" type="button" class="game-btn ${this.progressPortfolioSubTab === 'BADGES' ? 'game-btn-primary' : 'game-btn-secondary'} progres-sub-toggle-btn">
+                ${renderPixelIcon('trophy', 12, 'currentColor')}
+                <span>3 Lencana Prestasi Otentik</span>
+              </button>
+            </div>
+
+            <!-- VIEW A: MODUL KASUS LOGIKA -->
+            <div id="progres-sub-view-modules" style="display: ${this.progressPortfolioSubTab === 'MODULES' ? 'flex' : 'none'}; flex-direction: column; gap: 10px;">
+              ${CASE_MODULES.map((m, idx) => {
+                const isLocked = m.cycleRequired === 2 && !this.isCycle2Unlocked;
+                const prog = this.allModuleProgress[m.id];
+                const stars = prog?.stars || 0;
+                let weight = 0;
+                if (this.isCycle2Unlocked) {
+                  weight = idx === 0 ? 15 : (idx === 1 ? 15 : (idx === 2 ? 20 : 25));
+                } else {
+                  weight = idx === 0 ? 30 : (idx === 1 ? 30 : (idx === 2 ? 40 : 0));
+                }
+                const isDone = (prog?.testedBranches?.length || 0) >= 1 || !!prog?.isCompleted;
+                return `
+                  <div class="pixel-card-alt" style="padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div>
+                      <div style="font-family: var(--font-pixel); font-size: 10px; color: ${isLocked ? 'var(--text-muted)' : 'var(--primary)'}; margin-bottom: 2px;">
+                        ${isLocked ? '[TERKUNCI] ' : ''}MODUL ${idx + 1}: ${m.title}
+                      </div>
+                      <div style="font-size: 12px; color: var(--text-secondary);">
+                        ${isLocked ? 'Siklus 2: Memerlukan Token Kelas dari Guru' : `Bobot: <strong>${weight} Poin</strong> • Status: <span style="color: ${isDone ? 'var(--success)' : 'var(--text-muted)'}; font-weight: 600;">${isDone ? 'Tuntas Diselesaikan' : 'Belum Diuji'}</span>`}
+                      </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                      ${!isLocked ? `
+                      <span style="display: inline-flex; align-items: center; gap: 3px;">
+                        ${renderPixelIcon('star', 12, stars >= 1 ? 'var(--warning)' : 'var(--text-muted)')}
+                        ${renderPixelIcon('star', 12, stars >= 2 ? 'var(--warning)' : 'var(--text-muted)')}
+                      </span>
+                      <button type="button" class="game-btn game-btn-secondary btn-open-module-case" data-id="${m.id}" style="font-size: 11px; padding: 6px 12px; min-height: 40px;">
+                        Buka Kasus
+                      </button>
+                      ` : `
+                      <button type="button" class="game-btn game-btn-gold btn-token-module-case" data-id="${m.id}" style="font-size: 11px; padding: 6px 12px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px;">
+                        ${renderPixelIcon('lock', 11, '#ffffff')} Masukkan Token
+                      </button>
+                      `}
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- VIEW B: 3 LENCANA PRESTASI OTENTIK -->
+            <div id="progres-sub-view-badges" style="display: ${this.progressPortfolioSubTab === 'BADGES' ? 'grid' : 'none'}; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
+              ${(() => {
+                const hasCompletedAny = Object.values(this.allModuleProgress).some((p) => p.isCompleted);
+                const isLencana2Unlocked = (this.allModuleProgress['m01']?.stars || 0) >= 2;
+                return `
+                <!-- Lencana 1: Mengenal If-Else -->
+                <div style="padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
+                  <img src="/assets/images/badge_gold.svg" alt="Lencana Emas" style="width: 64px; height: 64px; margin-bottom: 12px; ${!hasCompletedAny ? 'opacity: 0.5; filter: grayscale(0.8);' : ''}" />
+                  <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
+                    Mengenal If-Else
+                  </div>
+                  <div style="margin-bottom: 8px;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: ${hasCompletedAny ? 'var(--success)' : 'var(--text-muted)'}; background: ${hasCompletedAny ? 'rgba(21, 128, 61, 0.08)' : 'rgba(0,0,0,0.04)'}; border: 1px solid ${hasCompletedAny ? 'rgba(21, 128, 61, 0.2)' : 'rgba(28, 25, 23, 0.1)'}; padding: 3px 8px; border-radius: 6px;">
+                      <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
+                      ${hasCompletedAny ? 'TERBUKA • Tuntas' : 'TERKUNCI • Selesaikan 1 Modul'}
+                    </span>
+                  </div>
+                  <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                    Tuntas mempelajari konsep dasar percabangan logika dan evaluasi kondisi boolean.
+                  </p>
+                </div>
+
+                <!-- Lencana 2: Penjelajah Logika -->
+                <div style="padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
+                  <img src="/assets/images/badge_compass.svg" alt="Lencana Kompas" style="width: 64px; height: 64px; margin-bottom: 12px; ${!isLencana2Unlocked ? 'opacity: 0.5; filter: grayscale(0.8);' : ''}" />
+                  <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
+                    Penjelajah Logika
+                  </div>
+                  <div style="margin-bottom: 8px;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: ${isLencana2Unlocked ? 'var(--primary)' : 'var(--text-muted)'}; background: ${isLencana2Unlocked ? 'rgba(15, 118, 110, 0.08)' : 'rgba(0,0,0,0.04)'}; border: 1px solid ${isLencana2Unlocked ? 'rgba(15, 118, 110, 0.2)' : 'rgba(28, 25, 23, 0.1)'}; padding: 3px 8px; border-radius: 6px;">
+                      <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
+                      ${isLencana2Unlocked ? 'TERBUKA • Kasus 1 Bintang 2' : 'TERKUNCI • Tuntaskan Kasus 1 (Bintang 2)'}
+                    </span>
+                  </div>
+                  <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                    Berhasil menguji semua jalur kondisi kode (IF dan ELSE) pada Kasus 1.
+                  </p>
+                </div>
+
+                <!-- Lencana 3: Master Kondisi -->
+                <div style="padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.3)' : 'var(--border-subtle)'}; border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
+                  <img src="/assets/images/badge_lock.svg" alt="Lencana Gembok" style="width: 64px; height: 64px; margin-bottom: 12px; ${!this.isCycle2Unlocked ? 'opacity: 0.7;' : ''}" />
+                  <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 6px;">
+                    Master Kondisi
+                  </div>
+                  <div style="margin-bottom: 8px;">
+                    <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: ${this.isCycle2Unlocked ? 'var(--warning-dark)' : 'var(--text-muted)'}; background: ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.08)' : 'rgba(0,0,0,0.04)'}; border: 1px solid ${this.isCycle2Unlocked ? 'rgba(217, 119, 6, 0.25)' : 'rgba(28, 25, 23, 0.1)'}; padding: 3px 8px; border-radius: 6px;">
+                      <span style="width: 5px; height: 5px; border-radius: 50%; background-color: currentColor;"></span>
+                      ${this.isCycle2Unlocked ? 'TERBUKA • Siklus 2' : 'TERKUNCI • Modul Siklus 2'}
+                    </span>
+                  </div>
+                  <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px;">
+                    Selesaikan kasus percabangan bertingkat dan operator logika ganda di Siklus 2.
+                  </p>
+                  ${!this.isCycle2Unlocked ? `
+                    <button id="btn-token-progress" type="button" class="game-btn game-btn-gold" style="font-size: 10.5px; padding: 6px 12px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;">
+                      ${renderPixelIcon('lock', 11, '#ffffff')} Masukkan Token
+                    </button>
+                  ` : ''}
+                </div>
+              `;
+              })()}
+            </div>
+
+            <!-- Tombol Lanjut ke Stack 3 -->
+            <div class="progres-advance-btn-box">
+              <button id="btn-advance-progres-stack-2" type="button" class="game-btn game-btn-primary" style="font-size: 12px; min-height: 44px; padding: 0 18px; display: inline-flex; align-items: center; gap: 8px;">
+                <span>Lanjut ke Evaluasi Akhir &amp; Kirim Laporan</span>
+                ${renderPixelIcon('arrow-right', 12, '#ffffff')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STACK 3: Evaluasi Akhir & Pengiriman Laporan ke Guru -->
+        <div id="progres-stack-card-3" class="progres-stack-card ${this.activeProgressStack === 3 ? 'active' : ''}">
+          <button id="progres-stack-header-3" type="button" class="progres-stack-header" aria-expanded="${this.activeProgressStack === 3}">
+            <div class="progres-stack-title-box">
+              <span id="progres-stack-badge-3" class="progres-stack-num-badge">3</span>
+              <div>
+                <div style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px;">
+                  Evaluasi Akhir &amp; Pengiriman Laporan ke Guru
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary);">
+                  Instrumen evaluasi kognitif Posttest resmi dan pengiriman digital 1-klik ke Google Drive Guru.
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: ${this.lastCloudUploadResult?.success ? 'var(--success)' : 'var(--primary)'}; background: ${this.lastCloudUploadResult?.success ? 'rgba(21, 128, 61, 0.08)' : 'rgba(15, 118, 110, 0.08)'}; border: 1px solid ${this.lastCloudUploadResult?.success ? 'rgba(21, 128, 61, 0.2)' : 'rgba(15, 118, 110, 0.2)'};">
+                ${this.lastCloudUploadResult?.success ? 'Laporan Terkirim' : '1-Klik Cloud Upload'}
+              </span>
+              <span id="progres-stack-chevron-3" class="progres-stack-chevron ${this.activeProgressStack === 3 ? 'expanded' : ''}">
+                ${renderPixelIcon('arrow-down', 12, 'var(--text-secondary)')}
+              </span>
+            </div>
+          </button>
+
+          <div id="progres-stack-body-3" class="progres-stack-body" style="display: ${this.activeProgressStack === 3 ? 'block' : 'none'};">
+            
+            <!-- 3A: Jembatan Evaluasi Resmi PTK (Posttest Pembelajaran) -->
+            <div class="tactile-card" style="padding: 16px 18px; margin-bottom: 16px; border: 1.5px solid var(--primary); border-radius: 12px; background: linear-gradient(135deg, rgba(15, 118, 110, 0.05) 0%, rgba(21, 128, 61, 0.04) 100%);">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(15, 118, 110, 0.12);">
+                    ${renderPixelIcon('document', 14, 'var(--primary)')}
+                  </span>
+                  <div>
+                    <div style="font-family: var(--font-ui); font-size: 13px; font-weight: 700; color: var(--text-primary);">
+                      Evaluasi Kognitif Mandiri: Posttest Pembelajaran
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">
+                      Instrumen evaluasi pemahaman konsep logika percabangan (Waktu: 35 menit)
+                    </div>
+                  </div>
+                </div>
+                <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: #ffffff; border: 1px solid var(--primary);">
+                  Google Form Resmi
+                </span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin-bottom: 12px;">
+                Bagi murid yang telah menyelesaikan penelusuran logika dan tantangan pada pertemuan ini, silakan akses dan kerjakan Posttest Pembelajaran secara mandiri untuk merekam capaian hasil belajar kognitif.
+              </p>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <a href="${escapeHtml(sanitizeWebUrl(StorageService.getPosttestUrlSync()) || DEFAULT_POSTTEST_URL)}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-primary" style="font-size: 12px; min-height: 44px; padding: 0 16px; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px;" title="Buka Google Form Posttest Pembelajaran di Tab Baru">
+                  ${renderPixelIcon('document', 13, '#ffffff')}
+                  <span>Buka Google Form Posttest Pembelajaran</span>
+                  ${renderPixelIcon('arrow-right', 11, '#ffffff')}
+                </a>
+              </div>
+            </div>
+
+            <!-- 3B: Pengiriman Hasil Progres ke Google Drive Guru -->
+            <div class="tactile-card" style="padding: 18px 20px; background: #ffffff; border: 1px solid var(--border-retro); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04); margin-bottom: 14px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                <div style="font-family: var(--font-pixel); font-size: 11px; color: var(--primary);">
+                  Kirim Hasil Progres Belajar
+                </div>
+                <span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--primary); background: rgba(15, 118, 110, 0.08); border: 1px solid rgba(15, 118, 110, 0.2);">
+                  Tujuan: Google Drive Siklus ${this.isCycle2Unlocked ? '2' : '1'} SMAN 15 Bandung
+                </span>
+              </div>
+              
+              <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.6;">
+                Kirimkan laporan hasil belajar formatif kamu langsung ke folder Google Drive Guru hanya dengan <strong>1 kali sentuh</strong>. Sistem otomatis mengunggah data dan mencadangkan berkas di perangkat murid.
+              </p>
+
+              ${this.lastCloudUploadResult ? `
+                <!-- Status Notifikasi Hasil Pengiriman Terakhir -->
+                <div style="padding: 12px 14px; margin-bottom: 14px; border-radius: 8px; background: ${this.lastCloudUploadResult.success ? 'rgba(21, 128, 61, 0.08)' : 'rgba(217, 119, 6, 0.08)'}; border: 1.5px solid ${this.lastCloudUploadResult.success ? 'var(--success)' : 'var(--warning)'}; display: flex; flex-direction: column; gap: 6px;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
+                    <span style="font-family: var(--font-code); font-size: 11.5px; font-weight: 700; color: ${this.lastCloudUploadResult.success ? 'var(--success)' : 'var(--warning-dark)'}; display: inline-flex; align-items: center; gap: 6px;">
+                      ${renderPixelIcon(this.lastCloudUploadResult.success ? 'check' : 'target', 13, this.lastCloudUploadResult.success ? 'var(--success)' : 'var(--warning-dark)')}
+                      ${this.lastCloudUploadResult.success ? (this.lastCloudUploadResult.isUpdated ? 'Laporan Berhasil Diperbarui di Drive Guru' : 'Laporan Berhasil Terkirim ke Drive Guru') : 'Pengiriman Selesai via Berkas Cadangan'}
+                    </span>
+                    ${this.lastCloudUploadResult.timestamp ? `
+                      <span style="font-family: var(--font-code); font-size: 10px; color: var(--text-muted);">
+                        ${this.lastCloudUploadResult.timestamp}
+                      </span>
+                    ` : ''}
+                  </div>
+                  <div style="font-size: 11.5px; color: var(--text-primary); line-height: 1.5;">
+                    ${this.lastCloudUploadResult.message}
+                  </div>
+                  <div style="font-family: var(--font-code); font-size: 10.5px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2px;">
+                    <span>Berkas: <strong style="color: var(--primary);">${this.lastCloudUploadResult.filename}</strong></span>
+                    ${this.lastCloudUploadResult.folderName ? `<span>• Folder: <strong>${this.lastCloudUploadResult.folderName}</strong></span>` : ''}
+                  </div>
+                  ${this.lastCloudUploadResult.fileUrl ? `
+                    <div style="margin-top: 6px;">
+                      <a href="${this.lastCloudUploadResult.fileUrl}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 4px 10px; min-height: 34px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                        ${renderPixelIcon('drive', 12, 'currentColor')} Buka Berkas di Google Drive Guru
+                      </a>
+                    </div>
+                  ` : ''}
+                </div>
+              ` : ''}
+
+              <!-- Ringkasan Identitas Pengiriman Laporan -->
+              <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px;">
+                  <span style="font-size: 11px; font-weight: 700; color: var(--text-primary);">
+                    Identitas Berkas Laporan (.txt):
+                  </span>
+                  <code style="font-family: var(--font-code); color: var(--primary); font-size: 11px; background: rgba(15, 118, 110, 0.08); padding: 2px 6px; border-radius: 4px;">
+                    ${expectedFilename}
+                  </code>
+                </div>
+                <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                  Target: <strong>Folder Google Drive Siklus ${this.isCycle2Unlocked ? '2' : '1'} SMAN 15 Bandung</strong> • Memuat nilai akumulasi pilar telusur modul, tantangan battle, dan kuis evaluasi formatif.
+                </p>
+              </div>
+
+              <!-- Tombol Aksi Pengiriman -->
+              <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="btn-direct-upload-drive" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 50px; gap: 10px; font-size: 13px; font-weight: 700; background: var(--primary); border: 1.5px solid var(--primary-dark);" ${this.isCloudUploading ? 'disabled' : ''}>
+                  ${this.isCloudUploading
+                    ? `${renderPixelIcon('refresh', 16, '#ffffff')} <span>Sedang Mengirim ke Google Drive Guru...</span>`
+                    : `${renderPixelIcon('upload', 16, '#ffffff')} <span>Kirim Laporan Langsung ke Drive Guru (1-Klik)</span>`
+                  }
+                </button>
+                <div style="font-size: 10.5px; color: var(--text-muted); text-align: center; margin-top: -4px;">
+                  1-Klik otomatis: laporan terkirim ke Google Drive Guru &amp; salinan cadangan tersimpan di gawai murid.
+                </div>
+
+                <!-- Pilihan Pendukung: Folder Drive & Unduh Teks Manual -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-top: 4px;">
+                  <a id="btn-open-drive-folder" href="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-gold" style="min-height: 44px; font-size: 11.5px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;" title="Buka Halaman Folder Google Drive Guru">
+                    ${renderPixelIcon('drive', 13, '#ffffff')} Buka Folder Drive Guru
+                  </a>
+                  <button id="btn-download-txt" type="button" class="game-btn game-btn-secondary" style="min-height: 44px; font-size: 11.5px; gap: 6px;">
+                    ${renderPixelIcon('document', 13, 'currentColor')} Unduh Berkas .txt Saja
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3C: Penutup Pembelajaran & Navigasi Selesai -->
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--border-subtle);">
+              <span style="font-size: 11px; color: var(--text-muted);">
+                Semua tahapan evaluasi dan sinkronisasi laporan telah siap.
+              </span>
+              <button id="btn-progres-finish-overworld" type="button" class="game-btn game-btn-secondary" style="min-height: 44px; font-size: 11.5px; gap: 8px;">
+                ${renderPixelIcon('map', 13, 'currentColor')} <span>Kembali ke Peta Kota Harmoni</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     `;
 
-    card.querySelector('#tab-btn-badges')?.addEventListener('click', () => {
-      this.activeProgressTab = 'BADGES';
-      this.render();
+    // Event listeners & Progressive Disclosure Stepper Logic
+    const progressFill = container.querySelector<HTMLElement>('#progres-progress-fill');
+    const progressText = container.querySelector<HTMLElement>('#progres-progress-text');
+
+    const stackCards = [
+      container.querySelector<HTMLElement>('#progres-stack-card-1'),
+      container.querySelector<HTMLElement>('#progres-stack-card-2'),
+      container.querySelector<HTMLElement>('#progres-stack-card-3'),
+    ];
+    const stackBodies = [
+      container.querySelector<HTMLElement>('#progres-stack-body-1'),
+      container.querySelector<HTMLElement>('#progres-stack-body-2'),
+      container.querySelector<HTMLElement>('#progres-stack-body-3'),
+    ];
+    const stackBadges = [
+      container.querySelector<HTMLElement>('#progres-stack-badge-1'),
+      container.querySelector<HTMLElement>('#progres-stack-badge-2'),
+      container.querySelector<HTMLElement>('#progres-stack-badge-3'),
+    ];
+    const stackChevrons = [
+      container.querySelector<HTMLElement>('#progres-stack-chevron-1'),
+      container.querySelector<HTMLElement>('#progres-stack-chevron-2'),
+      container.querySelector<HTMLElement>('#progres-stack-chevron-3'),
+    ];
+    const stepperPills = [
+      container.querySelector<HTMLButtonElement>('#progres-stepper-pill-1'),
+      container.querySelector<HTMLButtonElement>('#progres-stepper-pill-2'),
+      container.querySelector<HTMLButtonElement>('#progres-stepper-pill-3'),
+    ];
+
+    const updateStackViews = (targetStack: 1 | 2 | 3, shouldScroll = false) => {
+      this.activeProgressStack = targetStack;
+      const isComplete = this.maxUnlockedProgressStack === 3 && hasPriorWork;
+
+      // Update Stepper Bar
+      const percent = isComplete ? 100 : Math.round((this.activeProgressStack / 3) * 100);
+      if (progressFill) progressFill.style.width = `${percent}%`;
+      if (progressText) {
+        progressText.textContent = isComplete
+          ? 'Portofolio Lengkap (100% Siap)'
+          : `Tahap ${this.activeProgressStack} dari 3 • ${percent}% Ditinjau`;
+      }
+
+      for (let i = 1; i <= 3; i++) {
+        const idx = i - 1;
+        const c = stackCards[idx];
+        const body = stackBodies[idx];
+        const badge = stackBadges[idx];
+        const chevron = stackChevrons[idx];
+        const pill = stepperPills[idx];
+
+        if (!c || !body || !badge || !chevron || !pill) continue;
+
+        const isUnlocked = i <= this.maxUnlockedProgressStack || hasPriorWork;
+        const isOpen = i === this.activeProgressStack;
+        const isCompleted = (i < this.maxUnlockedProgressStack) || hasPriorWork;
+
+        // Card classes
+        c.classList.toggle('active', isOpen);
+        c.classList.toggle('locked', !isUnlocked);
+        c.classList.toggle('completed', isCompleted && !isOpen);
+
+        // Body display
+        body.style.display = isOpen ? 'block' : 'none';
+
+        // Badge styling
+        badge.style.backgroundColor = isOpen
+          ? 'var(--primary)'
+          : (isCompleted ? 'var(--success)' : 'var(--surface-panel-alt)');
+        badge.style.color = (isOpen || isCompleted) ? '#ffffff' : 'var(--text-secondary)';
+        badge.style.borderColor = isOpen
+          ? 'var(--primary)'
+          : (isCompleted ? 'var(--success)' : 'var(--border-subtle)');
+
+        // Chevron
+        chevron.classList.toggle('expanded', isOpen);
+
+        // Stepper pill
+        pill.classList.remove('active', 'completed', 'locked');
+        if (isOpen) {
+          pill.classList.add('active');
+        } else if (isCompleted) {
+          pill.classList.add('completed');
+        } else if (!isUnlocked) {
+          pill.classList.add('locked');
+        }
+      }
+
+      if (shouldScroll) {
+        const activeCard = stackCards[targetStack - 1];
+        if (activeCard) {
+          activeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    };
+
+    // Accordion Header Click Handler
+    [1, 2, 3].forEach((num) => {
+      const stackNum = num as 1 | 2 | 3;
+      const index = num - 1;
+      const headerBtn = container.querySelector<HTMLButtonElement>(`#progres-stack-header-${num}`);
+
+      headerBtn?.addEventListener('click', () => {
+        const isUnlocked = stackNum <= this.maxUnlockedProgressStack || hasPriorWork;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          const cardEl = stackCards[index];
+          if (cardEl) {
+            cardEl.classList.add('shake-anim');
+            setTimeout(() => cardEl.classList.remove('shake-anim'), 400);
+          }
+          this.showRetroToast('Selesaikan dan pahami tahapan progres sebelumnya terlebih dahulu.', false);
+          return;
+        }
+
+        soundFx.playButtonBlip();
+        if (this.activeProgressStack === stackNum) {
+          const body = stackBodies[index];
+          const chevron = stackChevrons[index];
+          if (body && chevron) {
+            const isCurrentlyOpen = body.style.display !== 'none';
+            body.style.display = isCurrentlyOpen ? 'none' : 'block';
+            chevron.classList.toggle('expanded', !isCurrentlyOpen);
+          }
+        } else {
+          updateStackViews(stackNum, true);
+        }
+      });
+
+      // Stepper Pill Click Handler
+      const pillBtn = stepperPills[index];
+      pillBtn?.addEventListener('click', () => {
+        const isUnlocked = stackNum <= this.maxUnlockedProgressStack || hasPriorWork;
+        if (!isUnlocked) {
+          soundFx.playLogicFalse();
+          const cardEl = stackCards[index];
+          if (cardEl) {
+            cardEl.classList.add('shake-anim');
+            setTimeout(() => cardEl.classList.remove('shake-anim'), 400);
+          }
+          this.showRetroToast('Selesaikan dan pahami tahapan progres sebelumnya terlebih dahulu.', false);
+          return;
+        }
+
+        soundFx.playButtonBlip();
+        updateStackViews(stackNum, true);
+      });
     });
 
-    card.querySelector('#tab-btn-modules')?.addEventListener('click', () => {
-      this.activeProgressTab = 'MODULES';
-      this.render();
+    // Advance button dari Stack 1 ke Stack 2
+    container.querySelector('#btn-advance-progres-stack-1')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      if (this.maxUnlockedProgressStack < 2) {
+        this.maxUnlockedProgressStack = 2;
+      }
+      updateStackViews(2, true);
     });
 
-    card.querySelector('#tab-btn-export')?.addEventListener('click', () => {
-      this.activeProgressTab = 'EXPORT';
-      this.render();
+    // Advance button dari Stack 2 ke Stack 3
+    container.querySelector('#btn-advance-progres-stack-2')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      if (this.maxUnlockedProgressStack < 3) {
+        this.maxUnlockedProgressStack = 3;
+      }
+      updateStackViews(3, true);
     });
 
-    card.querySelector('#btn-token-progress')?.addEventListener('click', () => {
+    // Sub-toggle Navigation Kasus vs Lencana di Stack 2
+    const btnSubModules = container.querySelector<HTMLButtonElement>('#btn-progres-sub-modules');
+    const btnSubBadges = container.querySelector<HTMLButtonElement>('#btn-progres-sub-badges');
+    const viewSubModules = container.querySelector<HTMLElement>('#progres-sub-view-modules');
+    const viewSubBadges = container.querySelector<HTMLElement>('#progres-sub-view-badges');
+
+    btnSubModules?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.progressPortfolioSubTab = 'MODULES';
+      btnSubModules.classList.replace('game-btn-secondary', 'game-btn-primary');
+      btnSubBadges?.classList.replace('game-btn-primary', 'game-btn-secondary');
+      if (viewSubModules) viewSubModules.style.display = 'flex';
+      if (viewSubBadges) viewSubBadges.style.display = 'none';
+    });
+
+    btnSubBadges?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.progressPortfolioSubTab = 'BADGES';
+      btnSubBadges.classList.replace('game-btn-secondary', 'game-btn-primary');
+      btnSubModules?.classList.replace('game-btn-primary', 'game-btn-secondary');
+      if (viewSubModules) viewSubModules.style.display = 'none';
+      if (viewSubBadges) viewSubBadges.style.display = 'grid';
+    });
+
+    // Token Modal di Badge / Modul
+    container.querySelector('#btn-token-progress')?.addEventListener('click', () => {
       soundFx.playButtonBlip();
       this.showStudentTokenModal();
     });
 
-    card.querySelectorAll<HTMLButtonElement>('.btn-open-module-case').forEach((btn) => {
+    container.querySelectorAll<HTMLButtonElement>('.btn-open-module-case').forEach((btn) => {
       btn.addEventListener('click', () => {
         soundFx.playButtonBlip();
         const modId = btn.dataset.id;
@@ -5908,7 +8040,7 @@ export class UIManager {
       });
     });
 
-    card.querySelectorAll<HTMLButtonElement>('.btn-token-module-case').forEach((btn) => {
+    container.querySelectorAll<HTMLButtonElement>('.btn-token-module-case').forEach((btn) => {
       btn.addEventListener('click', () => {
         soundFx.playButtonBlip();
         const modId = btn.dataset.id;
@@ -5916,47 +8048,50 @@ export class UIManager {
       });
     });
 
-    const exportDriveBtn = card.querySelector<HTMLButtonElement>('#btn-export-drive');
-    exportDriveBtn?.addEventListener('click', async () => {
+    // Handler 1-Klik Kirim Langsung ke Google Drive Guru
+    const directUploadBtn = container.querySelector<HTMLButtonElement>('#btn-direct-upload-drive');
+    directUploadBtn?.addEventListener('click', async () => {
       soundFx.playButtonBlip();
-      // Buka tab Google Drive guru secara langsung dalam synchronous user gesture
-      const driveUrl = StorageService.getDriveUrlSync();
-      const popupWindow = window.open(driveUrl, '_blank');
+      this.isCloudUploading = true;
+      this.render();
 
-      const originalHtml = exportDriveBtn.innerHTML;
-      exportDriveBtn.disabled = true;
-      exportDriveBtn.innerHTML = `${renderPixelIcon('drive', 13, '#ffffff')} Mengunduh Berkas...`;
       try {
-        const res = await AssessmentExportService.exportToDrive(driveUrl, popupWindow);
-        this.showRetroToast(res.message, res.success !== false);
+        const result = await AssessmentExportService.uploadDirectToDrive();
+        this.lastCloudUploadResult = result;
+        if (result.success) {
+          soundFx.playVictoryFanfare();
+          this.showRetroToast(result.message, true);
+        } else {
+          soundFx.playLogicFalse();
+          this.showRetroToast(result.message, false);
+        }
       } catch {
-        this.showRetroToast('Gagal menyiapkan berkas laporan.', false);
+        soundFx.playLogicFalse();
+        this.showRetroToast('Terjadi kendala saat mengirim laporan ke Google Drive.', false);
       } finally {
-        exportDriveBtn.disabled = false;
-        exportDriveBtn.innerHTML = originalHtml;
+        this.isCloudUploading = false;
+        this.render();
       }
     });
 
-    card.querySelector('#btn-open-drive-folder')?.addEventListener('click', () => {
+    container.querySelector('#btn-open-drive-folder')?.addEventListener('click', () => {
       soundFx.playButtonBlip();
     });
 
-    card.querySelector('#btn-download-txt')?.addEventListener('click', async () => {
+    container.querySelector('#btn-download-txt')?.addEventListener('click', async () => {
       soundFx.playButtonBlip();
       const { filename, content } = await AssessmentExportService.generateTextData();
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      AssessmentExportService.triggerLocalDownload(filename, content);
       this.showRetroToast(`Berkas laporan ${filename} berhasil diunduh ke gawai.`, true);
     });
 
-    return card;
+    // Tombol Selesai & Kembali ke Overworld Peta Utama
+    container.querySelector('#btn-progres-finish-overworld')?.addEventListener('click', () => {
+      soundFx.playButtonBlip();
+      this.setScreen('OVERWORLD');
+    });
+
+    return container;
   }
 
   // =================================================================
@@ -6026,6 +8161,21 @@ export class UIManager {
             Masuk Layar Penuh
           </button>
         </div>
+
+        <!-- Manajemen Identitas Murid Aktif -->
+        ${this.session ? `
+          <div class="pixel-card-alt" style="padding: 12px; border: 1px solid rgba(220, 38, 38, 0.25);">
+            <div style="font-family: var(--font-code); font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--danger); display: flex; align-items: center; gap: 6px;">
+              ${renderPixelIcon('refresh', 13, 'var(--danger)')} Manajemen Identitas Murid
+            </div>
+            <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">
+              Saat ini terdaftar sebagai <strong>${this.session.studentName ? `Absen ${String(this.session.studentAbsen || 0).padStart(2, '0')} • ${escapeHtml(this.session.studentName)}` : escapeHtml(this.session.pairId)}</strong>.
+            </p>
+            <button id="btn-settings-reset-profile" type="button" class="game-btn" style="min-height: 40px; width: 100%; background: transparent; border: 1.5px solid rgba(220, 38, 38, 0.4); color: var(--danger); font-size: 11.5px;">
+              ${renderPixelIcon('refresh', 12, 'var(--danger)')} Ganti / Daftarkan Profil Baru
+            </button>
+          </div>
+        ` : ''}
       </div>
     `;
 
@@ -6065,6 +8215,30 @@ export class UIManager {
       }
     });
 
+    card.querySelector('#btn-settings-reset-profile')?.addEventListener('click', () => {
+      this.showCelebrationModal(
+        'Ganti Profil Murid',
+        'Apakah kamu yakin ingin mengganti akun profil murid? Data progres yang telah dicapai tetap tersimpan di penyimpanan perangkat lokal.',
+        [
+          {
+            label: 'Ganti Profil',
+            isPrimary: true,
+            action: async () => {
+              await StorageService.clearSession();
+              this.session = undefined;
+              this.render();
+              this.setScreen('MENU');
+            }
+          },
+          {
+            label: 'Batalkan',
+            isPrimary: false,
+            action: () => { }
+          }
+        ]
+      );
+    });
+
     return card;
   }
 
@@ -6082,7 +8256,7 @@ export class UIManager {
       </div>
 
       <p style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px;">
-        Semua materi, tantangan logika, dan soal latihan sudah tersimpan di HP/laptop ini. Kalian bisa belajar dan bermain kapan saja meski internet sekolah sedang mati atau tidak ada kuota.
+        Semua materi, tantangan logika, dan soal latihan sudah tersimpan di HP/laptop ini. Kamu bisa belajar dan bermain kapan saja meski internet sekolah sedang mati atau tidak ada kuota.
       </p>
 
       <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -6258,6 +8432,32 @@ export class UIManager {
           </div>
         </div>
 
+        <!-- Pengaturan Google Apps Script Web App (1-Klik Upload Langsung) -->
+        <div>
+          <label style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
+            URL Web App Google Apps Script (1-Klik Upload):
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input id="input-teacher-gas-url" type="url" class="pixel-input" value="${escapeHtml(StorageService.getGasApiUrlSync())}" placeholder="https://script.google.com/macros/s/.../exec" style="flex: 1; min-height: 42px; font-size: 12px; font-family: var(--font-code);" />
+            <button id="btn-test-teacher-gas" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; display: inline-flex; align-items: center; gap: 4px;" title="Uji status endpoint Web App">
+              ${renderPixelIcon('refresh', 12, 'currentColor')} Uji Status
+            </button>
+          </div>
+        </div>
+
+        <!-- Pengaturan Google Form Posttest Pembelajaran -->
+        <div>
+          <label style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
+            Tautan Google Form Posttest Pembelajaran:
+          </label>
+          <div style="display: flex; gap: 8px;">
+            <input id="input-teacher-posttest-url" type="url" class="pixel-input" value="${escapeHtml(StorageService.getPosttestUrlSync())}" placeholder="https://forms.gle/..." style="flex: 1; min-height: 42px; font-size: 12px; font-family: var(--font-code);" />
+            <a id="btn-test-posttest" href="${escapeHtml(StorageService.getPosttestUrlSync())}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; text-decoration: none; display: flex; align-items: center; gap: 4px;" title="Uji tautan di tab baru">
+              ${renderPixelIcon('document', 13, 'currentColor')} Tes Tautan
+            </a>
+          </div>
+        </div>
+
         <!-- Tombol Aksi Simpan -->
         <button id="btn-save-teacher" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; font-size: 13px; font-weight: 700; gap: 8px; margin-top: 4px;">
           ${renderPixelIcon('check', 13, '#ffffff')} Simpan Pengaturan Guru
@@ -6421,12 +8621,58 @@ export class UIManager {
       }
     });
 
+    // Sinkronisasi Live URL Google Form Posttest Pembelajaran
+    const posttestInput = content.querySelector<HTMLInputElement>('#input-teacher-posttest-url');
+    const posttestTestBtn = content.querySelector<HTMLAnchorElement>('#btn-test-posttest');
+    posttestInput?.addEventListener('input', () => {
+      const val = posttestInput.value.trim();
+      if (posttestTestBtn) {
+        posttestTestBtn.href = val || '#';
+      }
+    });
+
+    // Uji Status Endpoint Web App Google Apps Script
+    const btnTestTeacherGas = content.querySelector<HTMLButtonElement>('#btn-test-teacher-gas');
+    btnTestTeacherGas?.addEventListener('click', async () => {
+      soundFx.playButtonBlip();
+      const teacherGasInput = content.querySelector<HTMLInputElement>('#input-teacher-gas-url');
+      const val = teacherGasInput?.value.trim() || StorageService.getGasApiUrlSync();
+      if (!val) {
+        this.showRetroToast('Masukkan URL Google Apps Script terlebih dahulu.', false);
+        return;
+      }
+      this.showRetroToast('Memeriksa status endpoint Web App...', true);
+      try {
+        const res = await fetch(val, { method: 'GET' });
+        const data = await res.json();
+        if (data && data.status === 'active') {
+          soundFx.playVictoryFanfare();
+          this.showRetroToast(`Layanan aktif: ${data.service}`, true);
+        } else {
+          this.showRetroToast('Endpoint merespons, namun format tidak sesuai.', false);
+        }
+      } catch {
+        soundFx.playLogicFalse();
+        this.showRetroToast('Tidak dapat menghubungi endpoint Web App.', false);
+      }
+    });
+
     // Simpan Pengaturan Guru
     const btnSave = content.querySelector<HTMLButtonElement>('#btn-save-teacher');
     btnSave?.addEventListener('click', async () => {
       const rawDrive = driveInput?.value.trim() || currentDriveUrl;
       const driveUrl = sanitizeWebUrl(rawDrive);
       const isNewlyUnlocked = cycle2Selected && !this.isCycle2Unlocked;
+
+      const teacherGasInput = content.querySelector<HTMLInputElement>('#input-teacher-gas-url');
+      const teacherGasUrl = teacherGasInput?.value.trim() || '';
+      await StorageService.setGasApiUrl(teacherGasUrl);
+
+      const teacherPosttestInput = content.querySelector<HTMLInputElement>('#input-teacher-posttest-url');
+      const teacherPosttestUrl = teacherPosttestInput?.value.trim() || '';
+      if (teacherPosttestUrl) {
+        await StorageService.setPosttestUrl(teacherPosttestUrl);
+      }
 
       await StorageService.setCycleState(cycle2Selected ? 2 : 1);
       await StorageService.setDriveUrl(driveUrl);
@@ -6679,7 +8925,7 @@ export class UIManager {
         </h2>
         <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 16px;">
           ${isStudent
-        ? 'Selamat! Gawai tim kalian kini berhasil membuka materi tingkat lanjut: <strong>Modul 4 (Percabangan Bertingkat)</strong> dan <strong>Modul 5 (Switch-Case)</strong>.'
+        ? 'Selamat! Gawai kamu kini berhasil membuka materi tingkat lanjut: <strong>Modul 4 (Percabangan Bertingkat)</strong> dan <strong>Modul 5 (Switch-Case)</strong>.'
         : 'Seluruh gawai murid kini dapat mengakses materi tingkat lanjut: <strong>Modul 4 (Percabangan Bertingkat)</strong> dan <strong>Modul 5 (Switch-Case)</strong>.'
       }
         </p>
@@ -6718,12 +8964,22 @@ export class UIManager {
       document.body.appendChild(container);
     }
 
+    // Bersihkan toast lama agar tidak terjadi penumpukan
+    container.innerHTML = '';
+
+    // Tutup toast panduan misi jika sedang aktif agar tidak terjadi tabrakan visual (split-attention)
+    const existingMissionToast = document.querySelector<HTMLElement>('.mission-guidance-toast');
+    if (existingMissionToast) {
+      existingMissionToast.remove();
+    }
+
     const toast = document.createElement('div');
-    toast.className = 'retro-toast-pill';
-    toast.style.borderColor = isSuccess ? 'var(--primary)' : 'var(--danger)';
+    toast.className = `retro-toast-pill ${isSuccess ? 'retro-toast-success' : 'retro-toast-warning'}`;
     toast.innerHTML = `
-      ${renderPixelIcon(isSuccess ? 'check' : 'target', 14, isSuccess ? 'var(--success)' : 'var(--danger)')}
-      <span>${message}</span>
+      <span class="retro-toast-icon">
+        ${renderPixelIcon(isSuccess ? 'check' : 'bulb', 13, isSuccess ? '#0F766E' : '#D97706')}
+      </span>
+      <span class="retro-toast-text">${escapeHtml(message)}</span>
     `;
 
     container.appendChild(toast);
@@ -6733,7 +8989,7 @@ export class UIManager {
       toast.style.opacity = '0';
       toast.style.transform = 'translateY(-10px)';
       window.setTimeout(() => toast.remove(), 260);
-    }, 2500);
+    }, 2800);
   }
 
   /**
