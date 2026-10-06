@@ -1080,11 +1080,11 @@ export class UIManager {
 
       <div class="footer-controls-minimal">
         <button id="btn-footer-bgm" class="footer-btn-minimal" type="button" aria-label="Toggle Musik Latar" title="Nyalakan atau Matikan Musik Latar">
-          <span class="footer-bgm-icon">${renderPixelIcon(isBgmActive ? 'music' : 'music-off', 13, 'currentColor')}</span>
+          <span class="footer-bgm-icon">${renderPixelIcon(isBgmActive ? 'music' : 'music-off', 12, 'currentColor')}</span>
           <span class="footer-bgm-label">${isBgmActive ? 'Musik ON' : 'Musik OFF'}</span>
         </button>
         <button id="btn-footer-audio" class="footer-btn-minimal" type="button" aria-label="Toggle Audio" title="Bisu / Aktifkan Suara Efek">
-          <span class="footer-audio-icon">${renderPixelIcon(isMuted ? 'speaker-off' : 'speaker', 13, 'currentColor')}</span>
+          <span class="footer-audio-icon">${renderPixelIcon(isMuted ? 'speaker-off' : 'speaker', 12, 'currentColor')}</span>
           <span class="footer-audio-label">${isMuted ? 'Bisu' : 'Suara'}</span>
         </button>
         <span class="footer-version-minimal">v1.1</span>
@@ -1115,8 +1115,8 @@ export class UIManager {
         const iconSpan = audioBtn.querySelector('.footer-audio-icon');
         const labelSpan = audioBtn.querySelector('.footer-audio-label');
         if (iconSpan) {
-          iconSpan.innerHTML = renderPixelIcon(muted ? 'speaker-off' : 'speaker', 13, 'currentColor');
-        }
+          iconSpan.innerHTML = renderPixelIcon(muted ? 'speaker-off' : 'speaker', 12, 'currentColor');
+``        }
         if (labelSpan) {
           labelSpan.textContent = muted ? 'Bisu' : 'Suara';
         }
@@ -9167,7 +9167,7 @@ export class UIManager {
     if (footerBgm) {
       const icon = footerBgm.querySelector('.footer-bgm-icon');
       const label = footerBgm.querySelector('.footer-bgm-label');
-      if (icon) icon.innerHTML = renderPixelIcon(isPlaying ? 'music' : 'music-off', 13, 'currentColor');
+      if (icon) icon.innerHTML = renderPixelIcon(isPlaying ? 'music' : 'music-off', 12, 'currentColor');
       if (label) label.textContent = isPlaying ? 'Musik ON' : 'Musik OFF';
     }
 
