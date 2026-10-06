@@ -56,18 +56,18 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <rect x="59" y="18" width="4" height="2" fill="#2dd4bf" />
 
           <!-- Bantalan Sensor Pemindai Kartu RFID (Tap Pad) -->
-          <rect x="57" y="25" width="8" height="5" fill="#0284c7" />
-          <rect x="58" y="26" width="6" height="3" fill="#38bdf8" />
+          <rect x="57" y="25" width="8" height="5" fill="#042f2e" />
+          <rect x="58" y="26" width="6" height="3" fill="#0f766e" />
 
           <!-- Kartu Metro Penumpang (Melayang Siap Tap) -->
-          <rect x="48" y="20" width="12" height="8" fill="#1d4ed8" rx="1" />
-          <rect x="49" y="21" width="10" height="6" fill="#3b82f6" />
+          <rect x="48" y="20" width="12" height="8" fill="#065f46" rx="1" />
+          <rect x="49" y="21" width="10" height="6" fill="#0f766e" />
           <rect x="50" y="23" width="3" height="2" fill="#f59e0b" /> <!-- Chip Emas -->
-          <rect x="55" y="22" width="3" height="1" fill="#93c5fd" />
+          <rect x="55" y="22" width="3" height="1" fill="#99f6e4" />
 
           <!-- Gelombang Sinyal RFID (NFC Radiance Pixel) -->
-          <rect x="46" y="22" width="1" height="2" fill="#38bdf8" />
-          <rect x="45" y="21" width="1" height="4" fill="#7dd3fc" />
+          <rect x="46" y="22" width="1" height="2" fill="#14b8a6" />
+          <rect x="45" y="21" width="1" height="4" fill="#2dd4bf" />
 
           <!-- Tanda Panah Arah Jalur Masuk di Lantai -->
           <rect x="38" y="46" width="4" height="2" fill="#0f766e" />
@@ -77,7 +77,7 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <!-- Teks Badge Pojok: Rp4.000 Threshold -->
           <rect x="4" y="4" width="28" height="7" fill="#0f172a" rx="2" />
           <rect x="5" y="5" width="26" height="5" fill="#1e293b" />
-          <text x="7" y="9" font-family="monospace" font-size="4" font-weight="bold" fill="#38bdf8">SYARAT &gt;= 4.000</text>
+          <text x="7" y="9" font-family="monospace" font-size="4" font-weight="bold" fill="#2dd4bf">SYARAT &gt;= 4.000</text>
         </svg>
       `.trim();
 
@@ -99,7 +99,7 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <!-- Server Blade 1 (Atas) -->
           <rect x="26" y="17" width="28" height="6" fill="#0f172a" />
           <rect x="28" y="19" width="3" height="2" fill="#22c55e" /> <!-- LED Power -->
-          <rect x="32" y="19" width="2" height="2" fill="#38bdf8" /> <!-- LED Network -->
+          <rect x="32" y="19" width="2" height="2" fill="#2dd4bf" /> <!-- LED Network -->
           <rect x="36" y="18" width="16" height="4" fill="#1e293b" /> <!-- Grill Ventilasi -->
           <line x1="38" y1="19" x2="50" y2="19" stroke="#334155" stroke-width="1" />
           <line x1="38" y1="21" x2="50" y2="21" stroke="#334155" stroke-width="1" />
@@ -209,9 +209,9 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <rect x="24" y="29" width="32" height="9" fill="#1e293b" />
           <!-- Lampu LED Indikator Router -->
           <rect x="27" y="32" width="2" height="2" fill="#22c55e" /> <!-- Power -->
-          <rect x="31" y="32" width="2" height="2" fill="#38bdf8" /> <!-- Internet -->
+          <rect x="31" y="32" width="2" height="2" fill="#2dd4bf" /> <!-- Internet -->
           <rect x="35" y="32" width="2" height="2" fill="#22c55e" /> <!-- Wi-Fi -->
-          <rect x="39" y="32" width="2" height="2" fill="#38bdf8" /> <!-- LAN 1 -->
+          <rect x="39" y="32" width="2" height="2" fill="#2dd4bf" /> <!-- LAN 1 -->
           <rect x="43" y="32" width="2" height="2" fill="#eab308" /> <!-- LAN 2 -->
 
           <!-- Antena Router Kiri (Miring) & Kanan (Miring) -->
@@ -230,7 +230,7 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <circle cx="40" cy="20" r="1.5" fill="#f8fafc" />
 
           <!-- Kabel UTP LAN Masuk ke Router -->
-          <path d="M 12 48 Q 20 44 26 39" stroke="#0284c7" stroke-width="2" fill="none" />
+          <path d="M 12 48 Q 20 44 26 39" stroke="#0d9488" stroke-width="2" fill="none" />
           <path d="M 68 48 Q 60 44 54 39" stroke="#0f766e" stroke-width="2" fill="none" />
 
           <!-- Badge Klasifikasi Bertingkat -->
@@ -267,9 +267,9 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <!-- Kaleng 2: Teh (Hijau) [Tombol 2] -->
           <rect x="34" y="18" width="3" height="5" fill="#15803d" rx="0.5" />
           <rect x="34" y="20" width="3" height="1" fill="#86efac" />
-          <!-- Kaleng 3: Susu (Putih/Biru) [Tombol 3] -->
+          <!-- Kaleng 3: Susu (Putih/Mint) [Tombol 3] -->
           <rect x="39" y="18" width="3" height="5" fill="#f8fafc" rx="0.5" />
-          <rect x="39" y="20" width="3" height="1" fill="#38bdf8" />
+          <rect x="39" y="20" width="3" height="1" fill="#99f6e4" />
 
           <!-- Rak Penyangga Kaleng Kaca -->
           <line x1="27" y1="24" x2="43" y2="24" stroke="#042f2e" stroke-width="1" />
@@ -283,11 +283,11 @@ export function renderCaseIllustrationPixelArt(moduleId: string, width = 160, he
           <rect x="46" y="15" width="8" height="20" fill="#042f2e" />
           <!-- Tampilan Angka LED -->
           <rect x="47" y="17" width="6" height="4" fill="#000000" />
-          <text x="49" y="20" font-family="monospace" font-size="3.5" font-weight="bold" fill="#38bdf8">1-3</text>
+          <text x="49" y="20" font-family="monospace" font-size="3.5" font-weight="bold" fill="#2dd4bf">1-3</text>
           <!-- Tombol Pilihan [1] [2] [3] -->
           <rect x="48" y="23" width="2" height="2" fill="#f59e0b" />
           <rect x="51" y="23" width="2" height="2" fill="#22c55e" />
-          <rect x="48" y="26" width="2" height="2" fill="#38bdf8" />
+          <rect x="48" y="26" width="2" height="2" fill="#0d9488" />
           <rect x="51" y="26" width="2" height="2" fill="#ef4444" /> <!-- Default/Cancel -->
           <!-- Slot Koin / Uang Kertas -->
           <rect x="48" y="30" width="4" height="1" fill="#64748b" />

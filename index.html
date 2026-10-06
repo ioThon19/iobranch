@@ -3,13 +3,24 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0F766E" />
   <meta name="description" content="iobranch - Game Belajar Percabangan Logika Pemrograman untuk Murid SMA Kelas X" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/webp" href="/assets/logo.webp" />
-  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="apple-touch-icon" href="/assets/logo.webp" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+
+  <!-- Open Graph & Social Sharing -->
+  <meta property="og:title" content="iobranch - Petualangan Logika Informatika SMA" />
+  <meta property="og:description" content="Media Pembelajaran Interaktif Percabangan Logika Pemrograman untuk Murid SMA Kelas X" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="/assets/logo.webp" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="iobranch - Petualangan Logika Informatika SMA" />
+  <meta name="twitter:description" content="Media Pembelajaran Interaktif Percabangan Logika Pemrograman untuk Murid SMA Kelas X" />
+  <meta name="twitter:image" content="/assets/logo.webp" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -19,6 +30,9 @@
 </head>
 
 <body>
+  <!-- Tautan Aksesibilitas Langsung ke Konten Utama (Skip Link) -->
+  <a href="#main-workspace" class="skip-link">Lewati ke Konten Utama</a>
+
   <div id="app">
     <!-- Header Navigasi Global (Persisten 100% di Atas) -->
     <header id="global-header"></header>
@@ -29,7 +43,7 @@
       <div id="game-console-wrapper" style="display: none;">
         <div class="console-bezel-frame">
           <!-- Layar Kanvas Game Phaser 3 -->
-          <div id="game-container"></div>
+          <div id="game-container" role="region" aria-label="Layar Visualisasi Permainan Petualangan Logika"></div>
         </div>
       </div>
 

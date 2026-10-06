@@ -178,7 +178,7 @@ export function renderTeamSymbolPixelArt(symbol: TeamSymbol, size = 32): string 
 
           <!-- Titik Asal Origin (0,0) -->
           <rect x="3" y="17" width="4" height="4" fill="#0F172A" />
-          <rect x="4" y="18" width="2" height="2" fill="#38BDF8" />
+          <rect x="4" y="18" width="2" height="2" fill="#0D9488" />
 
           <!-- Badan Vektor Diagonal 45 Derajat (Stepped Pixel Art) -->
           <rect x="6" y="16" width="2" height="2" fill="#EA580C" />
