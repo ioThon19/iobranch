@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   PROGRESSION: 'iobranch_progression_state',
   READ_MATERI: 'iobranch_read_materi',
   FORMATIVE_SCORES: 'iobranch_formative_scores',
+  FORMATIVE_SCORES_C2: 'iobranch_formative_scores_c2',
   GAS_API_URL: 'iobranch_gas_api_url',
   POSTTEST_URL: 'iobranch_posttest_url'
 } as const;
@@ -64,7 +65,7 @@ export class StorageService {
   private static posttestUrlMemoryCache: string = DEFAULT_POSTTEST_URL;
   private static progressionMemoryCache: ProgressionState | null = null;
   private static progressionWritePromise: Promise<ProgressionState> | null = null;
-  private static formativeMemoryCache: FormativeScores | null = null;
+  private static formativeMemoryCache: Record<number, FormativeScores> = {};
   private static formativeWritePromise: Promise<FormativeScores> | null = null;
 
   /**
@@ -82,14 +83,44 @@ export class StorageService {
   }
 
   /**
-   * Menghapus sesi aktif (saat reset profil murid)
+   * Menghapus sesi aktif (saat ganti profil murid)
    */
   public static async clearSession(): Promise<void> {
     this.progressionMemoryCache = null;
-    this.formativeMemoryCache = null;
+    this.formativeMemoryCache = {};
     await safeDel(STORAGE_KEYS.SESSION);
     await safeDel(STORAGE_KEYS.PROGRESSION);
     await safeDel(STORAGE_KEYS.FORMATIVE_SCORES);
+    await safeDel(STORAGE_KEYS.FORMATIVE_SCORES_C2);
+  }
+
+  /**
+   * Menghapus seluruh data progres belajar dan mengembalikan aplikasi ke kondisi awal murni (Fresh State).
+   * Menghapus profil sesi, status alur bertahap, hasil uji modul lab telusur (bintang & cabang),
+   * riwayat materi yang dibaca, skor formatif 3 pilar (Siklus 1 & 2), dan siklus aktif.
+   */
+  public static async resetAllProgress(): Promise<void> {
+    this.progressionMemoryCache = null;
+    this.formativeMemoryCache = {};
+    this.activeCycleMemoryCache = 1;
+
+    // Hapus seluruh data progres murid dari IndexedDB
+    await safeDel(STORAGE_KEYS.SESSION);
+    await safeDel(STORAGE_KEYS.PROGRESSION);
+    await safeDel(STORAGE_KEYS.PROGRESS);
+    await safeDel(STORAGE_KEYS.READ_MATERI);
+    await safeDel(STORAGE_KEYS.FORMATIVE_SCORES);
+    await safeDel(STORAGE_KEYS.FORMATIVE_SCORES_C2);
+    await safeDel(STORAGE_KEYS.CYCLE);
+
+    // Hapus dari in-memory fallback store
+    memoryStore.delete(STORAGE_KEYS.SESSION);
+    memoryStore.delete(STORAGE_KEYS.PROGRESSION);
+    memoryStore.delete(STORAGE_KEYS.PROGRESS);
+    memoryStore.delete(STORAGE_KEYS.READ_MATERI);
+    memoryStore.delete(STORAGE_KEYS.FORMATIVE_SCORES);
+    memoryStore.delete(STORAGE_KEYS.FORMATIVE_SCORES_C2);
+    memoryStore.delete(STORAGE_KEYS.CYCLE);
   }
 
   /**
@@ -448,13 +479,14 @@ export class StorageService {
   /**
    * Mengambil kalkulasi realtime nilai formatif 3 pilar (Skala 1–100)
    */
-  public static async getFormativeScores(): Promise<FormativeScores> {
+  public static async getFormativeScores(overrideCycle?: number): Promise<FormativeScores> {
+    const cycle = overrideCycle ?? (await this.getCycleState());
+    const isCycle2 = cycle === 2;
+    const storageKey = isCycle2 ? STORAGE_KEYS.FORMATIVE_SCORES_C2 : STORAGE_KEYS.FORMATIVE_SCORES;
+
     const allProgress = await this.getAllProgress();
     const progState = await this.getProgressionState();
-    const saved = this.formativeMemoryCache ?? (await safeGet<FormativeScores>(STORAGE_KEYS.FORMATIVE_SCORES));
-
-    const cycle = await this.getCycleState();
-    const isCycle2 = cycle === 2;
+    const saved = this.formativeMemoryCache[cycle] ?? (await safeGet<FormativeScores>(storageKey));
 
     // 1. Nilai Telusur (0–100): Sistem Pembobotan Kasus Kontekstual Sesuai Siklus Aktif
     const isMod1Done = (allProgress['m01']?.testedBranches?.length || 0) >= 1 || !!allProgress['m01']?.isCompleted;
@@ -480,13 +512,19 @@ export class StorageService {
     tracingScore = Math.min(100, tracingScore);
 
     // 2. Nilai Tantangan (0–100): Selesai 5 ronde pertempuran logika
-    const isBattleDone = !!(progState.stepBattleCompleted || saved?.isBattleLocked);
+    // Untuk Cycle 2: Hanya terkunci jika saved?.isBattleLocked bernilai true untuk Cycle 2
+    // Untuk Cycle 1: Terkunci jika saved?.isBattleLocked atau progState.stepBattleCompleted (kompatibilitas riwayat)
+    const isBattleDone = isCycle2
+      ? !!saved?.isBattleLocked
+      : !!(progState.stepBattleCompleted || saved?.isBattleLocked);
     const battleScore = saved?.isBattleLocked ? saved.battleScore : (isBattleDone ? 100 : 0);
 
     // 3. Nilai Evaluasi (0–100): 5 soal pilihan ganda konseptual (20 poin/soal)
     const evaluasiScore = saved?.evaluasiScore ?? 0;
-    const evaluasiAttemptCount = saved?.evaluasiAttemptCount ?? (progState.stepEvaluationCompleted ? 1 : 0);
-    const isEvaluasiLocked = saved?.isEvaluasiLocked ?? progState.stepEvaluationCompleted;
+    const evaluasiAttemptCount = saved?.evaluasiAttemptCount ?? (isCycle2 ? 0 : (progState.stepEvaluationCompleted ? 1 : 0));
+    const isEvaluasiLocked = isCycle2
+      ? (saved?.isEvaluasiLocked ?? false)
+      : (saved?.isEvaluasiLocked ?? progState.stepEvaluationCompleted);
 
     // Kunci nilai telusur resmi: jika sudah dikunci, gunakan skor tersimpan
     const isTracingLocked = saved?.isTracingLocked ?? false;
@@ -508,7 +546,7 @@ export class StorageService {
       updatedAt: saved?.updatedAt ?? Date.now()
     };
 
-    this.formativeMemoryCache = scores;
+    this.formativeMemoryCache[cycle] = scores;
     return scores;
   }
 
@@ -533,9 +571,11 @@ export class StorageService {
    * Mencatat nilai telusur pada percobaan pertama (First-Attempt Lock)
    * Dipanggil saat murid pertama kali menyelesaikan semua kasus siklus aktif.
    */
-  public static async recordFirstAttemptTracing(score: number): Promise<FormativeScores> {
+  public static async recordFirstAttemptTracing(score: number, overrideCycle?: number): Promise<FormativeScores> {
     const execute = async (): Promise<FormativeScores> => {
-      const current = await this.getFormativeScores();
+      const cycle = overrideCycle ?? (await this.getCycleState());
+      const storageKey = cycle === 2 ? STORAGE_KEYS.FORMATIVE_SCORES_C2 : STORAGE_KEYS.FORMATIVE_SCORES;
+      const current = await this.getFormativeScores(cycle);
       if (current.isTracingLocked) {
         return current;
       }
@@ -546,8 +586,8 @@ export class StorageService {
         finalScore: Math.round((score + current.battleScore + current.evaluasiScore) / 3),
         updatedAt: Date.now()
       };
-      this.formativeMemoryCache = updated;
-      await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+      this.formativeMemoryCache[cycle] = updated;
+      await safeSet(storageKey, updated);
       return updated;
     };
     const nextPromise = (this.formativeWritePromise ?? Promise.resolve(null as unknown as FormativeScores))
@@ -559,9 +599,11 @@ export class StorageService {
   /**
    * Mencatat nilai tantangan pada percobaan pertama (First-Attempt Lock)
    */
-  public static async recordFirstAttemptBattle(score = 100): Promise<FormativeScores> {
+  public static async recordFirstAttemptBattle(score = 100, overrideCycle?: number): Promise<FormativeScores> {
     const execute = async (): Promise<FormativeScores> => {
-      const current = await this.getFormativeScores();
+      const cycle = overrideCycle ?? (await this.getCycleState());
+      const storageKey = cycle === 2 ? STORAGE_KEYS.FORMATIVE_SCORES_C2 : STORAGE_KEYS.FORMATIVE_SCORES;
+      const current = await this.getFormativeScores(cycle);
       if (current.isBattleLocked) {
         return current;
       }
@@ -574,8 +616,8 @@ export class StorageService {
         updatedAt: Date.now()
       };
 
-      this.formativeMemoryCache = updated;
-      await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+      this.formativeMemoryCache[cycle] = updated;
+      await safeSet(storageKey, updated);
       return updated;
     };
 
@@ -591,10 +633,13 @@ export class StorageService {
   public static async recordFirstAttemptEvaluasi(
     correctAnswersCount: number,
     totalQuestions = 5,
-    answers: number[] = []
+    answers: number[] = [],
+    overrideCycle?: number
   ): Promise<FormativeScores> {
     const execute = async (): Promise<FormativeScores> => {
-      const current = await this.getFormativeScores();
+      const cycle = overrideCycle ?? (await this.getCycleState());
+      const storageKey = cycle === 2 ? STORAGE_KEYS.FORMATIVE_SCORES_C2 : STORAGE_KEYS.FORMATIVE_SCORES;
+      const current = await this.getFormativeScores(cycle);
 
       if (current.isEvaluasiLocked) {
         const updated: FormativeScores = {
@@ -602,8 +647,8 @@ export class StorageService {
           evaluasiAttemptCount: current.evaluasiAttemptCount + 1,
           updatedAt: Date.now()
         };
-        this.formativeMemoryCache = updated;
-        await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+        this.formativeMemoryCache[cycle] = updated;
+        await safeSet(storageKey, updated);
         return updated;
       }
 
@@ -618,8 +663,8 @@ export class StorageService {
         updatedAt: Date.now()
       };
 
-      this.formativeMemoryCache = updated;
-      await safeSet(STORAGE_KEYS.FORMATIVE_SCORES, updated);
+      this.formativeMemoryCache[cycle] = updated;
+      await safeSet(storageKey, updated);
       return updated;
     };
 
@@ -636,7 +681,7 @@ export class StorageService {
     const session = await this.getSession();
     const cycle = await this.getCycleState();
     const allProgress = await this.getAllProgress();
-    const formative = await this.getFormativeScores();
+    const formative = await this.getFormativeScores(cycle);
     const driveUrl = await this.getDriveUrl(cycle);
 
     const isIndividual = !!(session?.studentName && session?.studentAbsen);
