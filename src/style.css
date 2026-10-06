@@ -1239,9 +1239,10 @@ select {
 /* Penyelarasan Posisi Tengah Mutlak untuk Semua Perangkat Mobile & Tablet (<= 1024px) */
 @media (max-width: 1024px) {
   .hero-landing-wrapper {
-    flex: 1;
+    flex: 1 0 auto;
     height: 100%;
-    min-height: 0;
+    min-height: 100%;
+    width: 100%;
     justify-content: center !important;
     align-items: center !important;
     padding: clamp(14px, 4vw, 24px) !important;
@@ -1263,9 +1264,27 @@ select {
   }
 }
 
+/* Tampilan Desktop Menengah (1024px - 1279px) */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .hero-landing-wrapper {
+    background-position: left 22% center;
+    justify-content: flex-end;
+    padding-right: clamp(24px, 5vw, 60px);
+  }
+
+  .hero-landing-overlay {
+    background: linear-gradient(90deg, rgba(247, 245, 240, 0.25) 0%, rgba(247, 245, 240, 0.78) 52%, rgba(247, 245, 240, 0.96) 100%);
+  }
+
+  .hero-menu-card {
+    margin: 0 !important;
+  }
+}
+
 /* Tampilan Desktop Lebar (>= 1280px) */
 @media (min-width: 1280px) {
   .hero-landing-wrapper {
+    background-position: left 20% center;
     justify-content: flex-end;
     padding-right: clamp(32px, 8vw, 120px);
   }
@@ -1276,6 +1295,59 @@ select {
 
   .hero-menu-card {
     margin: 0 !important;
+  }
+}
+
+/* Responsivitas Desktop Ringkas / Layar Laptop (1024px+ dengan tinggi <= 760px) */
+@media (min-width: 1024px) and (max-height: 760px) {
+  .hero-landing-wrapper {
+    padding: 12px 24px !important;
+  }
+
+  .hero-menu-card {
+    max-width: 375px !important;
+    padding: 16px 20px !important;
+    border-radius: 12px !important;
+    gap: 8px !important;
+  }
+
+  .hero-menu-card > div:first-child {
+    margin-bottom: 8px !important;
+  }
+
+  .hero-menu-card #hero-menu-logo {
+    height: 38px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .hero-menu-card h1 {
+    font-size: 13px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .hero-menu-card p {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+  }
+
+  .hero-menu-card .tactile-panel {
+    padding: 8px 12px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .hero-menu-card .game-btn {
+    min-height: 40px !important;
+    font-size: 11.5px !important;
+    padding: 6px 12px !important;
+  }
+
+  .hero-quote-box {
+    bottom: 12px !important;
+    left: 18px !important;
+    max-width: 290px !important;
+    padding: 8px 12px !important;
+    font-size: 11px !important;
+    line-height: 1.4 !important;
   }
 }
 
@@ -1493,15 +1565,6 @@ select {
   box-shadow: 0 1px 2px rgba(28, 25, 23, 0.02);
 }
 
-.radar-status-item {
-  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
-}
-
-.radar-status-item[style*="cursor: pointer"]:hover {
-  border-color: rgba(15, 118, 110, 0.45) !important;
-  box-shadow: 0 4px 14px -2px rgba(15, 118, 110, 0.08), 0 1px 3px rgba(28, 25, 23, 0.04);
-  transform: translateY(-1px);
-}
 
 /* Minimalist Clean Modern Mission Card (Harmonis dengan Tactile Card) */
 .minimal-mission-card {
@@ -1721,12 +1784,18 @@ select {
 /* 1. Mobile Tier (<= 768px) - Handheld Stacked Layout */
 @media (max-width: 768px) {
   .hero-landing-wrapper {
+    flex: 1 0 auto !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
     justify-content: center !important;
     align-items: center !important;
-    padding: 16px !important;
-    flex: 1;
-    height: 100%;
-    min-height: 0;
+    padding: 16px 14px calc(24px + env(safe-area-inset-bottom, 16px)) !important;
+    background-image: url('/assets/hero_image.webp') !important;
+    background-size: cover !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+    box-sizing: border-box !important;
   }
 
   .hero-quote-box {
@@ -1743,8 +1812,11 @@ select {
   #main-workspace:has(.hero-landing-wrapper),
   .menu-mode #main-workspace {
     min-height: 0 !important;
-    flex: 1 !important;
+    flex: 1 1 auto !important;
     height: 100% !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   #game-console-wrapper {
@@ -1831,12 +1903,33 @@ select {
 
   #ui-overlay:has(.hero-landing-wrapper),
   .menu-mode #ui-overlay {
-    padding-bottom: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
     display: flex !important;
     flex-direction: column !important;
-    flex: 1 !important;
+    flex: 1 1 100% !important;
     height: 100% !important;
-    min-height: 0 !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    background-image: url('/assets/hero_image.webp') !important;
+    background-size: cover !important;
+    background-position: center center !important;
+    background-repeat: no-repeat !important;
+  }
+
+  .menu-mode .screen-content-wrapper,
+  .screen-content-wrapper.is-menu {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    flex: 1 0 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
 
   #global-header {
@@ -1949,7 +2042,10 @@ select {
   }
 
   .hero-landing-wrapper {
-    padding: 12px 14px !important;
+    padding: 12px 14px calc(20px + env(safe-area-inset-bottom, 12px)) !important;
+    min-height: 100% !important;
+    width: 100% !important;
+    flex: 1 0 auto !important;
   }
 }
 
@@ -2250,6 +2346,13 @@ select {
   margin-top: 10px;
 }
 
+.tracing-next-step-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .tracing-next-step-btn {
   font-size: 12.5px;
   min-height: 44px;
@@ -2524,6 +2627,48 @@ select {
   }
 }
 
+/* Penataan Khusus Tablet Portrait (769px - 880px): Mode Bertingkat (Stacked) */
+@media (min-width: 769px) and (max-width: 880px) {
+  #app.split-mode {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #app.split-mode #main-workspace {
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #app.split-mode #game-console-wrapper {
+    width: 100% !important;
+    height: auto !important;
+    max-height: 290px !important;
+    padding: 10px 16px !important;
+    border-right: none !important;
+    border-bottom: 2px solid var(--border-retro) !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+  }
+
+  #app.split-mode .console-bezel-frame {
+    max-width: 520px !important;
+  }
+
+  #app.split-mode #game-container {
+    max-height: 240px !important;
+  }
+
+  #app.split-mode #ui-overlay {
+    width: 100% !important;
+    flex: 1 !important;
+    height: auto !important;
+    overflow-y: visible !important;
+    padding: 12px 18px !important;
+  }
+}
+
 /* 3. Desktop Tier (>= 1024px) - Two-Column Workbench Layout */
 @media (min-width: 1024px) {
   #app {
@@ -2590,6 +2735,57 @@ select {
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Optimasi Navbar Desktop Menengah (1024px - 1280px) agar 9 Tab Tetap 1 Baris */
+@media (min-width: 1024px) and (max-width: 1280px) {
+  .retro-navbar {
+    padding: 6px 12px;
+    gap: 8px;
+    flex-wrap: nowrap !important;
+  }
+
+  .navbar-brand-wrapper {
+    flex-shrink: 0;
+  }
+
+  .navbar-brand-plate {
+    gap: 6px;
+    padding: 2px 2px;
+  }
+
+  .navbar-brand-logo {
+    height: 24px;
+  }
+
+  .navbar-brand-title {
+    font-size: 13px;
+  }
+
+  .gba-tab-nav-container {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .gba-tab-bar {
+    gap: 4px;
+    padding-bottom: 2px;
+  }
+
+  .gba-tab-item {
+    padding: 5px 8px;
+    font-size: 10px;
+    gap: 4px;
+    min-height: 36px;
+  }
+
+  .gba-tab-scroll-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    margin-bottom: 2px;
   }
 }
 
@@ -3768,7 +3964,34 @@ button:disabled {
   font-size: 12.5px;
   color: var(--text-primary);
   line-height: 1.6;
-  word-break: break-word;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.tracing-story-narrative-card {
+  background: #ffffff;
+  border: 1px solid var(--border-retro);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 4px 12px -2px rgba(28, 25, 23, 0.04);
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
+
+.tracing-narrative-p {
+  margin: 0 0 10px 0;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  line-height: 1.68;
+  text-align: left;
+  text-wrap: pretty;
+  word-break: normal;
+  overflow-wrap: break-word;
+  letter-spacing: -0.01em;
+}
+
+.tracing-narrative-p:last-child {
+  margin-bottom: 0;
 }
 
 .tracing-story-body {
@@ -4329,10 +4552,15 @@ button:disabled {
 
 /* 2. Layar Mobile & Tablet Sedang (<= 768px) */
 @media (max-width: 768px) {
-  .screen-content-wrapper {
+  .screen-content-wrapper:not(.is-menu) {
     padding: 10px 10px !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
+  }
+
+  .screen-content-wrapper.is-menu {
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .tactile-card,
@@ -4369,12 +4597,18 @@ button:disabled {
 
 /* 3. Layar Mobile Kompak (<= 640px) */
 @media (max-width: 640px) {
-  .screen-content-wrapper {
-    padding: 8px 8px !important;
+  .screen-content-wrapper:not(.is-menu) {
+    padding: 10px 10px calc(72px + env(safe-area-inset-bottom, 24px)) !important;
+  }
+
+  .screen-content-wrapper.is-menu {
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .tracing-screen-layout {
     gap: 12px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 16px));
   }
 
   .tracing-workflow-steps {
@@ -4453,6 +4687,7 @@ button:disabled {
   #btn-jump-to-workbench,
   #btn-conclude-tracing,
   #btn-retry-case,
+  #btn-next-case,
   .tracing-next-step-btn {
     min-height: 48px !important;
     width: 100% !important;
@@ -4467,7 +4702,24 @@ button:disabled {
   .tracing-next-step-card {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 12px !important;
+    gap: 14px !important;
+    margin-bottom: 24px !important;
+  }
+
+  .tracing-next-step-actions {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .tracing-next-step-actions .game-btn,
+  .tracing-next-step-actions button {
+    width: 100% !important;
+    min-height: 48px !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+    text-align: center !important;
   }
 
   .battle-actions-grid {
@@ -4520,8 +4772,13 @@ button:disabled {
 
 /* 4. Layar Mobile Sangat Kecil / Handheld Ringkas (<= 440px / 360px) */
 @media (max-width: 440px) {
-  .screen-content-wrapper {
-    padding: 6px 6px !important;
+  .screen-content-wrapper:not(.is-menu) {
+    padding: 8px 8px calc(80px + env(safe-area-inset-bottom, 24px)) !important;
+  }
+
+  .screen-content-wrapper.is-menu {
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   .tactile-card,

@@ -108,7 +108,7 @@ export class AssessmentExportService {
   ): Promise<DirectUploadResult> {
     const cycle = await StorageService.getCycleState();
     const session = await StorageService.getSession();
-    const formative = await StorageService.getFormativeScores();
+    const formative = await StorageService.getFormativeScores(cycle);
     const { filename, content } = await this.generateTextData();
 
     // 1. Selalu unduh cadangan lokal di gawai murid (Nol Risiko Kehilangan Data)
