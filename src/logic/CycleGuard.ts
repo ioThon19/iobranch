@@ -2,7 +2,34 @@
 import { EventCenter } from '../game/EventCenter';
 import { StorageService } from '../services/StorageService';
 
-export const TEACHER_SECRET_PINS = ['PTK', 'PTK10'];
+/**
+ * Sidik jari kriptografis SHA-256 PIN resmi fasilitator guru.
+ * Menyimpan hash alih-alih teks polos untuk mencegah pembacaan string rahasia di bundle klien.
+ */
+export const TEACHER_PIN_HASHES: readonly string[] = [
+  '7f42f76dcdf8690a92ce03c21c0676bee45db04c544d59292a3a8d0f489f2a26', // Hash SHA-256 untuk 'PTK'
+  '331376f0642e1d61df2481484f5379fcb76752a65d63af3b403baec2bca39217'  // Hash SHA-256 untuk 'PTK10'
+];
+
+export const TEACHER_SECRET_PINS = TEACHER_PIN_HASHES;
+
+/**
+ * Menghitung hash SHA-256 secara aman menggunakan Web Crypto API peramban
+ */
+async function computeSha256(text: string): Promise<string> {
+  if (typeof crypto !== 'undefined' && crypto.subtle) {
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(text);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      // Abaikan jika peramban membatasi Web Crypto
+    }
+  }
+  return '';
+}
 
 export class CycleGuard {
   /**
@@ -24,12 +51,13 @@ export class CycleGuard {
   }
 
   /**
-   * Memverifikasi PIN rahasia guru untuk membuka modal kendali guru
+   * Memverifikasi PIN rahasia guru untuk membuka modal kendali guru melalui pencocokan hash
    */
   public static async verifyTeacherPin(pinInput: string): Promise<boolean> {
     if (!pinInput) return false;
     const clean = pinInput.trim().toUpperCase().replace(/[\s\-_]/g, '');
-    const isValid = TEACHER_SECRET_PINS.includes(clean);
+    const hashed = await computeSha256(clean);
+    const isValid = TEACHER_PIN_HASHES.includes(hashed);
     if (isValid) {
       EventCenter.emit('TEACHER_PANEL_OPENED');
     }

@@ -212,6 +212,19 @@ export class StorageService {
   }
 
   /**
+   * Memeriksa apakah suatu URL adalah URL bawaan resmi sistem untuk Siklus 1 atau Siklus 2
+   */
+  public static isDefaultDriveUrl(url?: string | null): boolean {
+    if (!url) return true;
+    const clean = url.trim();
+    return clean === DRIVE_CYCLE_URLS[1] ||
+      clean === DRIVE_CYCLE_URLS[2] ||
+      clean === 'https://s.id/progres-siklus1' ||
+      clean.includes('1wwpkYt4PMCnGL2NgMR_Bp88B0PxN_FwC') ||
+      clean.includes('1259eAOfYs9FZdFJxEUieCdBZTLI72rPr');
+  }
+
+  /**
    * Mengambil status siklus aktif (1 = Siklus I, 2 = Siklus II)
    */
   public static async getCycleState(): Promise<number> {
@@ -222,11 +235,19 @@ export class StorageService {
   }
 
   /**
-   * Memperbarui status siklus aktif
+   * Memperbarui status siklus aktif dan menyesuaikan folder drive bawaan
    */
   public static async setCycleState(cycle: 1 | 2): Promise<void> {
     this.activeCycleMemoryCache = cycle;
     await safeSet(STORAGE_KEYS.CYCLE, cycle);
+
+    // Jika drive URL saat ini adalah bawaan siklus, otomatis sinkronkan ke folder siklus baru
+    const currentDrive = this.driveUrlMemoryCache;
+    if (this.isDefaultDriveUrl(currentDrive)) {
+      const targetDefault = DRIVE_CYCLE_URLS[cycle] || DEFAULT_DRIVE_URL;
+      this.driveUrlMemoryCache = targetDefault;
+      await safeSet(STORAGE_KEYS.DRIVE_URL, targetDefault);
+    }
   }
 
   /**
@@ -237,12 +258,7 @@ export class StorageService {
     const cycleDefault = DRIVE_CYCLE_URLS[targetCycle] || DEFAULT_DRIVE_URL;
     const cached = this.driveUrlMemoryCache;
 
-    const isLegacy = !cached ||
-      cached === 'https://s.id/progres-siklus1' ||
-      cached.includes('1wwpkYt4PMCnGL2NgMR_Bp88B0PxN_FwC') ||
-      cached.includes('1259eAOfYs9FZdFJxEUieCdBZTLI72rPr');
-
-    if (isLegacy) {
+    if (this.isDefaultDriveUrl(cached)) {
       return cycleDefault;
     }
     return cached;
@@ -271,14 +287,9 @@ export class StorageService {
 
     const activeCycle = overrideCycle ?? (await this.getCycleState());
     const defaultUrlForCycle = DRIVE_CYCLE_URLS[activeCycle] || DEFAULT_DRIVE_URL;
-    const stored = await safeGet<string>(STORAGE_KEYS.DRIVE_URL, defaultUrlForCycle);
+    const stored = (await safeGet<string>(STORAGE_KEYS.DRIVE_URL, defaultUrlForCycle)) ?? defaultUrlForCycle;
 
-    const isLegacy = !stored ||
-      stored === 'https://s.id/progres-siklus1' ||
-      stored.includes('1wwpkYt4PMCnGL2NgMR_Bp88B0PxN_FwC') ||
-      stored.includes('1259eAOfYs9FZdFJxEUieCdBZTLI72rPr');
-
-    if (isLegacy) {
+    if (this.isDefaultDriveUrl(stored)) {
       this.driveUrlMemoryCache = defaultUrlForCycle;
       await safeSet(STORAGE_KEYS.DRIVE_URL, defaultUrlForCycle);
       return defaultUrlForCycle;
@@ -292,7 +303,9 @@ export class StorageService {
    * Memperbarui URL Google Drive tujuan pengumpulan
    */
   public static async setDriveUrl(url: string): Promise<void> {
-    const cleanUrl = url.trim() || DEFAULT_DRIVE_URL;
+    const activeCycle = this.activeCycleMemoryCache ?? 1;
+    const defaultForActive = DRIVE_CYCLE_URLS[activeCycle] || DEFAULT_DRIVE_URL;
+    const cleanUrl = url.trim() || defaultForActive;
     this.driveUrlMemoryCache = cleanUrl;
     await safeSet(STORAGE_KEYS.DRIVE_URL, cleanUrl);
   }

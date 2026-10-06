@@ -178,7 +178,7 @@ export class DialogBox {
         align-items: center;
         gap: 5px;
         letter-spacing: 0.3px;
-        animation: pulse-subtle 1.2s infinite ease-in-out;
+        opacity: 0.95;
       ">
         ${renderPixelIcon('arrow-down', 10, 'var(--warning)')} <span>Tekan untuk lanjut</span>
       </div>

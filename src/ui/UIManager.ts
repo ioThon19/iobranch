@@ -3,7 +3,7 @@ import { CASE_MODULES } from '../logic/modules.data';
 import { MATERI_BANK, getMateriTopicById } from '../logic/materi.data';
 import { CaseModule } from '../types/module.types';
 import { StudentSession, ModuleProgress, TeamSymbol, ProgressionState, FormativeScores, TracingWizardStep, MissionGuidanceMeta } from '../types/session.types';
-import { StorageService, DEFAULT_POSTTEST_URL } from '../services/StorageService';
+import { StorageService, DEFAULT_POSTTEST_URL, DRIVE_CYCLE_URLS, DEFAULT_DRIVE_URL } from '../services/StorageService';
 import { soundFx } from '../services/AudioService';
 import { AssessmentExportService, DirectUploadResult } from '../services/AssessmentExportService';
 import { CycleGuard } from '../logic/CycleGuard';
@@ -855,21 +855,9 @@ export class UIManager {
 
     // Kontainer Isi Layar Aktif
     const isGameVisible = this.currentScreen === 'OVERWORLD' || this.currentScreen === 'TRACING' || this.currentScreen === 'BATTLE';
-    const screenWrapper = document.createElement('div');
-    screenWrapper.className = 'screen-content-wrapper';
-    screenWrapper.style.cssText = `
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-      min-height: 0;
-      padding: ${this.currentScreen === 'MENU' ? '0' : '14px 16px'};
-      max-width: ${this.currentScreen === 'MENU' || isGameVisible ? '100%' : '1060px'};
-      margin: 0 auto;
-      width: 100%;
-      box-sizing: border-box;
-      overflow-x: hidden;
-    `;
+    const screenWrapper = document.createElement('section');
+    screenWrapper.className = `screen-content-wrapper ${this.currentScreen === 'MENU' ? 'is-menu' : ''} ${isGameVisible ? 'is-game-visible' : ''}`;
+    screenWrapper.setAttribute('aria-label', `Layar ${this.currentScreen}`);
 
     switch (this.currentScreen) {
       case 'MENU':
@@ -929,9 +917,9 @@ export class UIManager {
       <div class="navbar-brand-plate">
         <img src="/assets/logo.webp" alt="iobranch Logo" class="navbar-brand-logo" />
         <div class="navbar-brand-meta">
-          <span class="navbar-brand-title">IOBRANCH</span>
+          <span class="navbar-brand-title">iobranch</span>
           <span class="navbar-brand-subtitle eyebrow-label">
-            SIKLUS ${this.isCycle2Unlocked ? '2 (MAJU)' : '1 (DASAR)'}
+            Siklus ${this.isCycle2Unlocked ? '2 (Maju)' : '1 (Dasar)'}
           </span>
         </div>
         ${this.session
@@ -949,8 +937,9 @@ export class UIManager {
     });
 
     // Container Navigasi Tab dengan Tombol Bantuan Scroll
-    const tabsContainer = document.createElement('div');
+    const tabsContainer = document.createElement('nav');
     tabsContainer.className = 'gba-tab-nav-container';
+    tabsContainer.setAttribute('aria-label', 'Navigasi Utama Layar');
 
     const prevBtn = document.createElement('button');
     prevBtn.type = 'button';
@@ -1080,7 +1069,7 @@ export class UIManager {
     footer.innerHTML = `
       <div class="footer-brand-minimal">
         <img src="/assets/logo.webp" alt="iobranch" class="footer-brand-logo" style="object-fit: contain;" />
-        <span class="footer-brand-name">IOBRANCH</span>
+        <span class="footer-brand-name">iobranch</span>
       </div>
 
       <div class="footer-controls-minimal">
@@ -1183,7 +1172,7 @@ export class UIManager {
                 ${renderTeamSymbolPixelArt(this.session.teamSymbol, 28)}
               </div>
               <div>
-                <span class="eyebrow-label" style="color: var(--primary); font-size: 9px;">${this.session.studentName ? 'PENYELIDIK LOGIKA' : `AVATAR ${escapeHtml(this.session.teamSymbol.toUpperCase())}`}</span>
+                <span class="eyebrow-label" style="color: var(--primary); font-size: 9px;">${this.session.studentName ? 'Penyelidik Logika' : `Avatar ${escapeHtml(this.session.teamSymbol)}`}</span>
                 <div style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">
                   ${this.session.studentName
           ? `Absen ${String(this.session.studentAbsen || 0).padStart(2, '0')} • ${escapeHtml(this.session.studentName)}`
@@ -1199,7 +1188,7 @@ export class UIManager {
 
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 8px 12px; background: var(--surface-panel-alt); border-radius: 8px; border: 1px solid var(--border-subtle);">
             <div style="display: flex; align-items: center; gap: 6px;">
-              <span class="eyebrow-label" style="font-size: 9.5px; color: var(--text-secondary);">TAHAP BELAJAR:</span>
+              <span class="eyebrow-label" style="font-size: 9.5px; color: var(--text-secondary);">Tahap Belajar:</span>
               <span style="font-size: 11.5px; font-weight: 700; color: ${this.isCycle2Unlocked ? 'var(--warning)' : 'var(--primary)'};">
                 ${this.isCycle2Unlocked ? 'Siklus 2 (Maju)' : 'Siklus 1 (Dasar)'}
               </span>
@@ -1209,7 +1198,7 @@ export class UIManager {
                   ${renderPixelIcon('lock', 11, '#ffffff')} Buka Siklus 2
                 </button>`
           : `<span class="badge-pill" style="font-size: 10px; font-weight: 700; color: var(--success); border-color: var(--success); background: rgba(21, 128, 61, 0.1);">
-                  ${renderPixelIcon('check', 10, 'var(--success)')} TERBUKA
+                  ${renderPixelIcon('check', 10, 'var(--success)')} Terbuka
                 </span>`
         }
           </div>
@@ -1379,19 +1368,9 @@ export class UIManager {
       this.maxUnlockedGuideStack = 3;
     }
 
-    container.style.cssText = `
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      width: 100%;
-      max-width: 960px;
-      margin: 0 auto;
-      padding-bottom: 24px;
-    `;
-
     container.innerHTML = `
       <!-- 1. Header Panduan Dossier -->
-      <div class="tactile-card" style="padding: 20px 22px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
+      <section class="tactile-card" style="padding: 20px 22px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
           <div>
             <span class="eyebrow-label" style="color: var(--primary); margin-bottom: 3px; display: block;">
@@ -1412,7 +1391,7 @@ export class UIManager {
         <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 0;">
           Pelajari 3 tahap panduan di bawah ini secara berurutan untuk memahami alur petualangan logika di kelas.
         </p>
-      </div>
+      </section>
 
       <!-- Bilah Stepper Progres Panduan -->
       <div class="guide-stepper-box">
@@ -1441,7 +1420,7 @@ export class UIManager {
       </div>
 
       <!-- STACK 1: Pola Belajar Mandiri Terbimbing -->
-      <div id="guide-stack-card-1" class="guide-stack-card active">
+      <article id="guide-stack-card-1" class="guide-stack-card active">
         <button id="guide-stack-header-1" type="button" class="guide-stack-header" aria-expanded="true">
           <div class="guide-stack-title-box">
             <div class="guide-stack-num-badge">01</div>
@@ -1492,10 +1471,10 @@ export class UIManager {
             </button>
           </div>
         </div>
-      </div>
+      </article>
 
       <!-- STACK 2: Struktur Tahapan 2 Siklus Belajar -->
-      <div id="guide-stack-card-2" class="guide-stack-card ${hasReadGuide ? '' : 'locked'}">
+      <article id="guide-stack-card-2" class="guide-stack-card ${hasReadGuide ? '' : 'locked'}">
         <button id="guide-stack-header-2" type="button" class="guide-stack-header" aria-expanded="false">
           <div class="guide-stack-title-box">
             <div class="guide-stack-num-badge">02</div>
@@ -1597,10 +1576,10 @@ export class UIManager {
             </button>
           </div>
         </div>
-      </div>
+      </article>
 
       <!-- STACK 3: Urutan Kegiatan Kelas (6 Langkah Misi) -->
-      <div id="guide-stack-card-3" class="guide-stack-card ${hasReadGuide ? '' : 'locked'}">
+      <article id="guide-stack-card-3" class="guide-stack-card ${hasReadGuide ? '' : 'locked'}">
         <button id="guide-stack-header-3" type="button" class="guide-stack-header" aria-expanded="false">
           <div class="guide-stack-title-box">
             <div class="guide-stack-num-badge">03</div>
@@ -1770,7 +1749,7 @@ export class UIManager {
             </div>
           </div>
         </div>
-      </div>
+      </article>
     `;
 
     // Interaktivitas Accordion Progressive Disclosure Stack
@@ -1969,11 +1948,15 @@ export class UIManager {
 
     const modalContent = document.createElement('div');
     modalContent.className = 'tactile-card';
+    modalContent.setAttribute('role', 'dialog');
+    modalContent.setAttribute('aria-modal', 'true');
+    modalContent.setAttribute('aria-label', 'Registrasi Penyelidik Logika');
     modalContent.style.cssText = `
       max-width: 500px;
       width: 100%;
       padding: 22px;
       max-height: 90vh;
+      max-height: 90dvh;
       overflow-y: auto;
     `;
 
@@ -1982,7 +1965,7 @@ export class UIManager {
         <span class="eyebrow-label" style="font-size: 11px; color: var(--primary);">
           ${renderPixelIcon('shield', 13, 'var(--primary)')} Registrasi Penyelidik Logika
         </span>
-        <button type="button" class="btn-close-modal" style="background: none; border: 1.5px solid var(--border-retro); border-radius: 4px; padding: 2px 8px; color: var(--text-muted); font-family: var(--font-code); font-size: 12px; cursor: pointer;">Tutup [X]</button>
+        <button type="button" class="btn-close-modal" aria-label="Tutup jendela registrasi" style="background: none; border: 1.5px solid var(--border-retro); border-radius: 4px; padding: 8px 12px; min-width: 44px; min-height: 44px; color: var(--text-muted); font-family: var(--font-code); font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;">Tutup [X]</button>
       </div>
 
       <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5;">
@@ -2068,9 +2051,23 @@ export class UIManager {
       });
     });
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
     const closeModal = () => {
+      window.removeEventListener('keydown', handleKeyDown);
       modalBackdrop.remove();
     };
+
+    modalBackdrop.addEventListener('click', (e) => {
+      if (e.target === modalBackdrop) {
+        closeModal();
+      }
+    });
 
     modalContent.querySelector('.btn-close-modal')?.addEventListener('click', closeModal);
 
@@ -2241,9 +2238,10 @@ export class UIManager {
     }
 
     // 1. PANDUAN KENDALI EKSPLORASI DI PALING ATAS (Tactile Console Control Strip)
-    const controlHud = document.createElement('div');
+    const controlHud = document.createElement('section');
     controlHud.className = 'tactile-card';
-    controlHud.style.cssText = `padding: 16px 18px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);`;
+    controlHud.style.cssText = `padding: 16px 18px; box-sizing: border-box;`;
+    controlHud.setAttribute('aria-label', 'Panduan Kendali & Navigasi Kota');
     controlHud.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
         <div style="font-family: var(--font-ui); font-size: 13.5px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
@@ -2290,9 +2288,10 @@ export class UIManager {
     container.appendChild(controlHud);
 
     // 2. KARTU PAPAN MISI UTAMA AKTIF (Primary Active Quest Focus)
-    const questCard = document.createElement('div');
+    const questCard = document.createElement('section');
     questCard.className = 'tactile-card';
-    questCard.style.cssText = `padding: 18px 20px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);`;
+    questCard.style.cssText = `padding: 18px 20px; box-sizing: border-box;`;
+    questCard.setAttribute('aria-label', 'Misi Aktif');
     questCard.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
         <span class="badge-pill" style="font-size: 11px; color: var(--primary); font-weight: 700; letter-spacing: 0.3px;">
@@ -2329,9 +2328,10 @@ export class UIManager {
     });
 
     // 3. RADAR STATUS KETERBUKAAN GEDUNG KOTA (Landmark Status Overview)
-    const radarSection = document.createElement('div');
+    const radarSection = document.createElement('section');
     radarSection.className = 'tactile-card';
-    radarSection.style.cssText = `padding: 20px 22px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);`;
+    radarSection.style.cssText = `padding: 18px 20px; box-sizing: border-box;`;
+    radarSection.setAttribute('aria-label', 'Radar Status Keterbukaan Gedung Kota');
     radarSection.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
         <div>
@@ -2348,7 +2348,7 @@ export class UIManager {
         </span>
       </div>
 
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
         <!-- Gedung 1: Sekolah (Materi) -->
         <div id="radar-card-materi" class="radar-status-item" style="padding: 14px 15px; display: flex; flex-direction: column; justify-content: space-between; background: ${isMateriUnlocked ? '#ffffff' : 'var(--surface-panel-alt)'}; border: 1px solid ${isMateriUnlocked ? 'rgba(15, 118, 110, 0.25)' : 'rgba(28, 25, 23, 0.07)'}; border-radius: 10px; transition: all 0.15s ease; ${isMateriUnlocked ? 'cursor: pointer;' : 'opacity: 0.85;'}">
           <div>
@@ -2544,9 +2544,10 @@ export class UIManager {
     const studentDisplayName = this.session?.studentName || this.session?.student1Name || 'Penyelidik Logika';
     const studentAbsenDisplay = this.session?.studentAbsen ? `Absen ${String(this.session.studentAbsen).padStart(2, '0')}` : (this.session?.pairId || '-');
 
-    const card = document.createElement('div');
+    const card = document.createElement('section');
     card.className = 'tactile-card';
-    card.style.cssText = `padding: 22px 24px; background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 14px; box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);`;
+    card.style.cssText = `padding: 18px 20px; box-sizing: border-box;`;
+    card.setAttribute('aria-label', 'Sesi Dialog & Orientasi Masalah');
 
     card.innerHTML = `
       <!-- Breadcrumb Navigasi Lokasi -->
@@ -2729,9 +2730,9 @@ export class UIManager {
                 </span>
                 <span style="height: 1px; flex: 1; background: var(--border-subtle);"></span>
               </div>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
                 <!-- Masalah 1 -->
-                <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; min-height: 116px;">
                   <div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
@@ -2749,7 +2750,7 @@ export class UIManager {
                 </div>
 
                 <!-- Masalah 2 -->
-                <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; min-height: 116px;">
                   <div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
@@ -2767,7 +2768,7 @@ export class UIManager {
                 </div>
 
                 <!-- Masalah 3 -->
-                <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div style="background: var(--surface-panel-alt); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; min-height: 116px;">
                   <div>
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; margin-bottom: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
@@ -2794,10 +2795,10 @@ export class UIManager {
                 </span>
                 <span style="height: 1px; flex: 1; background: var(--border-subtle);"></span>
               </div>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
                 <!-- Masalah 4 -->
-                <div style="position: relative; background: ${this.isCycle2Unlocked ? 'var(--surface-panel-alt)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px ${this.isCycle2Unlocked ? 'solid var(--border-subtle)' : 'dashed rgba(217, 119, 6, 0.40)'}; border-radius: 8px; overflow: hidden;">
-                  <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
+                <div style="position: relative; background: ${this.isCycle2Unlocked ? 'var(--surface-panel-alt)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px ${this.isCycle2Unlocked ? 'solid var(--border-subtle)' : 'dashed rgba(217, 119, 6, 0.40)'}; border-radius: 8px; overflow: hidden; box-sizing: border-box; min-height: 116px;">
+                  <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
                         ${renderPixelIcon('bolt', 12, 'var(--primary)')} 4. Kuota Paket Data
@@ -2825,8 +2826,8 @@ export class UIManager {
                 </div>
 
                 <!-- Masalah 5 -->
-                <div style="position: relative; background: ${this.isCycle2Unlocked ? 'var(--surface-panel-alt)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px ${this.isCycle2Unlocked ? 'solid var(--border-subtle)' : 'dashed rgba(217, 119, 6, 0.40)'}; border-radius: 8px; overflow: hidden;">
-                  <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
+                <div style="position: relative; background: ${this.isCycle2Unlocked ? 'var(--surface-panel-alt)' : 'rgba(217, 119, 6, 0.04)'}; border: 1px ${this.isCycle2Unlocked ? 'solid var(--border-subtle)' : 'dashed rgba(217, 119, 6, 0.40)'}; border-radius: 8px; overflow: hidden; box-sizing: border-box; min-height: 116px;">
+                  <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; ${this.isCycle2Unlocked ? '' : 'filter: blur(4px); pointer-events: none; user-select: none;'}">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 6px;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 5px;">
                         ${renderPixelIcon('flask', 12, 'var(--primary)')} 5. Mesin Minuman Otomatis
@@ -3258,8 +3259,9 @@ export class UIManager {
     // -------------------------------------------------------------
     // Kolom Kiri: Navigasi Sidebar Modul Pembelajaran (Responsif Mobile)
     // -------------------------------------------------------------
-    const sidebar = document.createElement('div');
+    const sidebar = document.createElement('aside');
     sidebar.className = 'tactile-card materi-sidebar';
+    sidebar.setAttribute('aria-label', 'Daftar Modul Pembelajaran');
 
     const prasyaratTopics = MATERI_BANK.filter((t) => t.category === 'PRASYARAT');
     const percabanganTopics = MATERI_BANK.filter((t) => t.category === 'PERCABANGAN');
@@ -3403,8 +3405,9 @@ export class UIManager {
     // -------------------------------------------------------------
     // Kolom Kanan: Kartu Baca Materi
     // -------------------------------------------------------------
-    const contentCard = document.createElement('div');
+    const contentCard = document.createElement('article');
     contentCard.className = 'tactile-card materi-content-card';
+    contentCard.setAttribute('aria-label', `Modul Materi: ${currentTopic.title}`);
 
     // Render HTML Sections
     let sectionsHtml = '';
@@ -3528,8 +3531,8 @@ export class UIManager {
 
             <!-- 2. Input/Output -->
             <g transform="translate(140, 15)">
-              <polygon points="12,0 100,0 88,38 0,38" fill="#E0F2FE" stroke="#0284C7" stroke-width="2"/>
-              <text x="50" y="24" text-anchor="middle" font-family="'Inter', sans-serif" font-size="11" font-weight="bold" fill="#0284C7">Input/Output</text>
+              <polygon points="12,0 100,0 88,38 0,38" fill="rgba(15, 118, 110, 0.1)" stroke="#0F766E" stroke-width="2"/>
+              <text x="50" y="24" text-anchor="middle" font-family="'Inter', sans-serif" font-size="11" font-weight="bold" fill="#0F766E">Input/Output</text>
               <text x="50" y="55" text-anchor="middle" font-family="'Inter', sans-serif" font-size="9.5" fill="#4B5563">Masukan/Keluaran</text>
             </g>
             <path d="M 245, 34 L 265, 34" stroke="#78716C" stroke-width="2" marker-end="url(#arrow-sym)"/>
@@ -3720,8 +3723,8 @@ export class UIManager {
             <label style="font-size: 12.5px; font-weight: 700; color: var(--text-primary);">
               ${sim.variableLabel}:
             </label>
-            <input id="input-sim-val" type="number" class="pixel-input" value="${sim.defaultValue}" style="width: 120px; min-height: 38px; font-family: var(--font-code); font-size: 13px; font-weight: bold;" />
-            <button id="btn-run-sim" type="button" class="game-btn game-btn-primary" style="font-size: 11.5px; min-height: 38px; padding: 6px 14px; gap: 6px; border-radius: 8px;">
+            <input id="input-sim-val" type="number" class="pixel-input" value="${sim.defaultValue}" style="width: 120px; min-height: 44px; font-family: var(--font-code); font-size: 13px; font-weight: bold;" />
+            <button id="btn-run-sim" type="button" class="game-btn game-btn-primary" style="font-size: 11.5px; min-height: 44px; padding: 8px 14px; gap: 6px; border-radius: 8px;">
               ${renderPixelIcon('bolt', 12, '#ffffff')} Uji Kondisi
             </button>
           </div>
@@ -3817,7 +3820,7 @@ export class UIManager {
         <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px;">
 
           <!-- STACK 1: Konsep Dasar & Diagram Alur -->
-          <div id="materi-stack-card-1" class="materi-stack-card ${activeStack === 1 ? 'active' : (isAlreadyRead ? 'completed' : '')}">
+          <article id="materi-stack-card-1" class="materi-stack-card ${activeStack === 1 ? 'active' : (isAlreadyRead ? 'completed' : '')}">
             <button id="materi-stack-header-1" type="button" class="materi-stack-header" aria-expanded="${activeStack === 1 ? 'true' : 'false'}">
               <div class="materi-stack-title-box">
                 <div class="materi-stack-num-badge">01</div>
@@ -3858,10 +3861,10 @@ export class UIManager {
                 </button>
               </div>
             </div>
-          </div>
+          </article>
 
           <!-- STACK 2: Bedah Sintaks & Contoh Kode -->
-          <div id="materi-stack-card-2" class="materi-stack-card ${activeStack === 2 ? 'active' : (maxUnlocked < 2 && !isAlreadyRead ? 'locked' : (isAlreadyRead ? 'completed' : ''))}">
+          <article id="materi-stack-card-2" class="materi-stack-card ${activeStack === 2 ? 'active' : (maxUnlocked < 2 && !isAlreadyRead ? 'locked' : (isAlreadyRead ? 'completed' : ''))}">
             <button id="materi-stack-header-2" type="button" class="materi-stack-header" aria-expanded="${activeStack === 2 ? 'true' : 'false'}">
               <div class="materi-stack-title-box">
                 <div class="materi-stack-num-badge">02</div>
@@ -3889,26 +3892,26 @@ export class UIManager {
               ${sectionsHtml}
 
               <!-- Kotak Petunjuk / Tips Guru -->
-              <div class="tips-callout" style="margin-bottom: 14px;">
+              <aside class="tips-callout" style="margin-bottom: 14px;">
                 <div style="display: flex; align-items: center; gap: 6px; font-weight: bold; color: var(--warning); font-size: 12px;">
                   ${renderPixelIcon('bulb', 14, 'var(--warning)')} Tips Logika Penting:
                 </div>
                 <p style="margin-top: 4px; font-size: 12.5px; line-height: 1.5; color: var(--text-secondary);">
                   ${currentTopic.proTips}
                 </p>
-              </div>
+              </aside>
 
               <!-- Kotak Peringatan Miskonsepsi jika ada -->
               ${misconceptionHtml}
 
               <!-- Kotak Panduan Rangkuman LKPD Murid -->
-              <div style="margin: 14px 0; padding: 12px 14px; background: rgba(15, 118, 110, 0.05); border: 1.5px dashed rgba(15, 118, 110, 0.35); border-radius: 10px; display: flex; align-items: flex-start; gap: 10px;">
+              <aside style="margin: 14px 0; padding: 12px 14px; background: rgba(15, 118, 110, 0.05); border: 1.5px dashed rgba(15, 118, 110, 0.35); border-radius: 10px; display: flex; align-items: flex-start; gap: 10px;">
                 <span style="display: inline-flex; margin-top: 2px;">${renderPixelIcon('document', 14, 'var(--primary)')}</span>
                 <div style="font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
                   <strong style="color: var(--primary); display: block; margin-bottom: 2px;">Tugas Murid pada LKPD di Meja:</strong>
                   Sambil membaca materi ini, catat intisari konsep, tabel operator, pola kode, atau tips penting di atas ke <strong>Lembar Kerja Rangkuman (LKPD)</strong> fisikmu!
                 </div>
-              </div>
+              </aside>
 
               <div class="materi-advance-btn-box">
                 <button id="btn-materi-advance-2" type="button" class="game-btn game-btn-primary" style="padding: 10px 18px; font-size: 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 8px;">
@@ -3916,10 +3919,10 @@ export class UIManager {
                 </button>
               </div>
             </div>
-          </div>
+          </article>
 
           <!-- STACK 3: Eksplorasi Interaktif & Refleksi Mandiri -->
-          <div id="materi-stack-card-3" class="materi-stack-card ${activeStack === 3 ? 'active' : (maxUnlocked < 3 && !isAlreadyRead ? 'locked' : (isAlreadyRead ? 'completed' : ''))}">
+          <article id="materi-stack-card-3" class="materi-stack-card ${activeStack === 3 ? 'active' : (maxUnlocked < 3 && !isAlreadyRead ? 'locked' : (isAlreadyRead ? 'completed' : ''))}">
             <button id="materi-stack-header-3" type="button" class="materi-stack-header" aria-expanded="${activeStack === 3 ? 'true' : 'false'}">
               <div class="materi-stack-title-box">
                 <div class="materi-stack-num-badge">03</div>
@@ -3987,7 +3990,7 @@ export class UIManager {
                 ` : ''}
               </div>
             </div>
-          </div>
+          </article>
 
         </div>
       </div>
@@ -3998,18 +4001,17 @@ export class UIManager {
           <div style="display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; background: rgba(217, 119, 6, 0.12); margin-bottom: 4px; border: 2px solid var(--warning);">
             ${renderPixelIcon('lock', 26, 'var(--warning)')}
           </div>
-          <div class="eyebrow-label" style="color: var(--warning-dark); margin-bottom: 2px;">Gerbang Siklus 2 Terkunci</div>
           <h2 style="font-size: 15px; font-weight: 700; color: var(--text-primary); margin: 0 0 6px;">
-            ${currentTopic.title}
+            ${currentTopic.title} (Gerbang Siklus 2 Terkunci)
           </h2>
           <p style="font-size: 12.5px; color: var(--text-secondary); max-width: 440px; margin: 0 auto 12px; line-height: 1.55;">
             Materi tingkat lanjut (Percabangan Bertingkat &amp; Majemuk) dibuka menggunakan <strong>Token Kelas</strong> yang diumumkan oleh Guru Informatika saat masuk ke pertemuan Siklus 2.
           </p>
           <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-            <button id="btn-unlock-materi-cycle2" type="button" class="game-btn game-btn-gold" style="font-size: 11px; padding: 8px 16px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px;">
+            <button id="btn-unlock-materi-cycle2" type="button" class="game-btn game-btn-gold" style="font-size: 11px; padding: 8px 16px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
               ${renderPixelIcon('unlock', 11, '#ffffff')} Masukkan Token Guru
             </button>
-            <button id="btn-back-to-cycle1" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 14px; min-height: 40px; display: inline-flex; align-items: center; gap: 6px;">
+            <button id="btn-back-to-cycle1" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 14px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
               ${renderPixelIcon('arrow-left', 11, 'var(--text-secondary)')} Kembali ke Topik Sebelumnya
             </button>
           </div>
@@ -4646,27 +4648,43 @@ export class UIManager {
       if (collBody) collBody.style.display = 'flex';
       if (compactSum) compactSum.style.display = 'none';
       if (toggleBtn) toggleBtn.innerHTML = `${renderPixelIcon('arrow-up', 10, 'currentColor')} Ciutkan Setup`;
-      const storyCallout = root.querySelector<HTMLElement>('.tracing-story-callout');
-      storyCallout?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      requestAnimationFrame(() => {
+        const storyCallout = root.querySelector<HTMLElement>('.tracing-story-callout');
+        storyCallout?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     } else if (step === 2) {
       this.isTracingHeroCollapsed = false;
       if (collBody) collBody.style.display = 'flex';
       if (compactSum) compactSum.style.display = 'none';
       if (toggleBtn) toggleBtn.innerHTML = `${renderPixelIcon('arrow-up', 10, 'currentColor')} Ciutkan Setup`;
-      const setupGrid = root.querySelector<HTMLElement>('.tracing-setup-grid');
-      setupGrid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const inputEl = root.querySelector<HTMLInputElement>('#input-trace-val');
-      if (inputEl && !this.isInputApplied) inputEl.focus();
+      requestAnimationFrame(() => {
+        const setupGrid = root.querySelector<HTMLElement>('.tracing-setup-grid');
+        setupGrid?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const inputEl = root.querySelector<HTMLInputElement>('#input-trace-val');
+        if (inputEl && !this.isInputApplied) inputEl.focus();
+      });
     } else if (step === 3) {
+      // Lepaskan fokus dari tombol aksi di dalam hero card sebelum ciutkan setup
+      if (document.activeElement && collBody?.contains(document.activeElement)) {
+        (document.activeElement as HTMLElement).blur();
+      }
       this.isTracingHeroCollapsed = true;
       if (collBody) collBody.style.display = 'none';
       if (compactSum) compactSum.style.display = 'flex';
       if (toggleBtn) toggleBtn.innerHTML = `${renderPixelIcon('arrow-down', 10, 'currentColor')} Buka Setup`;
-      const workbench = root.querySelector<HTMLElement>('#tracing-workbench-anchor');
-      workbench?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      requestAnimationFrame(() => {
+        const workbench = root.querySelector<HTMLElement>('#tracing-workbench-anchor');
+        if (workbench) {
+          workbench.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          const btnStepNext = workbench.querySelector<HTMLButtonElement>('#btn-step-next');
+          btnStepNext?.focus({ preventScroll: true });
+        }
+      });
     } else if (step === 4) {
-      const zoneEval = root.querySelector<HTMLElement>('.tracing-zone-evaluation');
-      zoneEval?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      requestAnimationFrame(() => {
+        const zoneEval = root.querySelector<HTMLElement>('.tracing-zone-evaluation');
+        zoneEval?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
     }
   }
 
@@ -4693,9 +4711,10 @@ export class UIManager {
       }
     });
 
-    const caseStepperContainer = document.createElement('div');
+    const caseStepperContainer = document.createElement('section');
     caseStepperContainer.className = 'tracing-case-stepper';
     caseStepperContainer.id = 'tracing-case-stepper';
+    caseStepperContainer.setAttribute('aria-label', 'Papan Misi Kasus Wajib Lab Telusur');
 
     const cycleTitle = this.isCycle2Unlocked ? 'Siklus 2' : 'Siklus 1';
     const totalPointsTarget = 100;
@@ -4735,7 +4754,7 @@ export class UIManager {
           const testedBranches = prog?.testedBranches || [];
           const testedCount = testedBranches.length;
           const totalBranches = branchDefs.length;
-          const isDone = testedCount >= totalBranches || !!prog?.isCompleted;
+          const isDone = testedCount >= totalBranches;
           const isPartial = testedCount > 0 && !isDone;
           const isLocked = mod.cycleRequired === 2 && !this.isCycle2Unlocked;
 
@@ -4746,21 +4765,21 @@ export class UIManager {
 
           let statusClass = 'status-pending';
           let statusBadgeText = `0/${totalBranches} Cabang (${weight} Poin)`;
-          let statusColor = 'var(--text-muted)';
-          let statusBg = 'var(--surface-code)';
+          let statusColor = '#57534E';
+          let statusBg = '#E7E5DF';
           let statusIcon: PixelIconType = 'refresh';
 
           if (isDone) {
             statusClass = 'status-completed';
-            statusBadgeText = `${testedCount}/${totalBranches} Cabang Selesai (${weight} Poin)`;
-            statusColor = 'var(--success)';
-            statusBg = 'rgba(21, 128, 61, 0.12)';
+            statusBadgeText = `${testedCount}/${totalBranches} Cabang Selesai (${weight} Poin • 2 Bintang)`;
+            statusColor = '#166534';
+            statusBg = 'rgba(21, 128, 61, 0.10)';
             statusIcon = 'check';
           } else if (isPartial) {
             statusClass = 'status-partial';
-            statusBadgeText = `${testedCount}/${totalBranches} Cabang (Uji Cabang 2)`;
-            statusColor = '#b45309';
-            statusBg = 'rgba(245, 158, 11, 0.14)';
+            statusBadgeText = `${testedCount}/${totalBranches} Cabang (${weight} Poin • Uji Cabang Lain)`;
+            statusColor = '#92400E';
+            statusBg = 'rgba(217, 119, 6, 0.10)';
             statusIcon = 'target';
           }
 
@@ -4778,7 +4797,7 @@ export class UIManager {
               </div>
               ${isActive ? `
                 <div class="case-card-active-indicator">
-                  <span class="pulse-dot"></span> SEDANG DITELUSURI
+                  <span class="pulse-dot"></span> Sedang Ditelusuri
                 </div>
               ` : ''}
             </div>
@@ -4826,9 +4845,10 @@ export class UIManager {
     // =========================================================================
     // 0.B. Pita Panduan Alur Belajar Terstruktur (Pedagogical Stepper Ribbon)
     // =========================================================================
-    const workflowRibbon = document.createElement('div');
+    const workflowRibbon = document.createElement('nav');
     workflowRibbon.className = 'tracing-workflow-ribbon';
     workflowRibbon.id = 'tracing-workflow-ribbon';
+    workflowRibbon.setAttribute('aria-label', 'Pita Alur Penelusuran Logika');
 
     const isCompletedRun = this.currentStepIndex >= (this.currentTraceResult?.steps.length || 1) - 1 && this.userPrediction !== null;
     const step1Status = this.tracingWizardStep === 1 ? 'active' : (this.isInputApplied || this.userPrediction !== null ? 'completed' : '');
@@ -4883,7 +4903,7 @@ export class UIManager {
           <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-ui);">
             4 Langkah Berurutan Terpandu
           </span>
-          <button id="btn-help-mission" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 6px 12px; min-height: 38px; display: inline-flex; align-items: center; gap: 5px;" title="Tampilkan Panduan Misi Langkah Aktif">
+          <button id="btn-help-mission" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 5px;" title="Tampilkan Panduan Misi Langkah Aktif">
             ${renderPixelIcon('bulb', 11, 'currentColor')} Panduan Misi
           </button>
         </div>
@@ -4940,8 +4960,9 @@ export class UIManager {
     // =========================================================================
     // ZONA 1: Orientasi & Hipotesis Awal (Langkah 1 dan 2)
     // =========================================================================
-    const zoneOrientation = document.createElement('div');
+    const zoneOrientation = document.createElement('section');
     zoneOrientation.className = 'tracing-zone-orientation';
+    zoneOrientation.setAttribute('aria-label', 'Zona Orientasi & Prediksi Percabangan');
 
     // Kartu Hero Terpadu: Pemilih Kasus, Skenario Kontekstual, & Form Hipotesis
     const heroCard = document.createElement('div');
@@ -5007,11 +5028,11 @@ export class UIManager {
           ${this.isTracingPracticeMode ? 'Mode Latihan' : 'Lab Formatif'}
         </span>
       </div>
-      <button id="btn-toggle-hero-card" type="button" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 4px 10px; min-height: 32px; display: inline-flex; align-items: center; gap: 6px;" title="${this.isTracingHeroCollapsed ? 'Buka detail setup studi kasus' : 'Ciutkan kartu setup untuk fokus ke Meja Kerja'}">
+      <button id="btn-toggle-hero-card" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 6px 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;" title="${this.isTracingHeroCollapsed ? 'Buka detail setup studi kasus' : 'Ciutkan kartu setup untuk fokus ke Meja Kerja'}">
         ${this.isTracingHeroCollapsed ? renderPixelIcon('arrow-down', 10, 'currentColor') + ' Buka Setup' : renderPixelIcon('arrow-up', 10, 'currentColor') + ' Ciutkan Setup'}
       </button>
     `;
-    heroTop.firstElementChild?.appendChild(selectEl);
+
     heroCard.appendChild(heroTop);
 
     // 1.B. Strip Ringkas Hero Card (tampil saat kartu diciutkan agar murid tetap tahu konteks kasus aktif)
@@ -5036,7 +5057,7 @@ export class UIManager {
           Dugaan: <strong id="compact-summary-pred" style="color: var(--warning-dark);">${this.userPrediction || '(belum memilih)'}</strong>
         </span>
       </div>
-      <button id="btn-reopen-hero-card" type="button" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 4px 8px; min-height: 28px;">
+      <button id="btn-reopen-hero-card" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 6px 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;">
         ${renderPixelIcon('arrow-down', 10, 'currentColor')} Buka Setup Kasus
       </button>
     `;
@@ -5144,7 +5165,7 @@ export class UIManager {
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
               ${this.activeModule.testPresets.map(preset => `
-                <button type="button" class="game-btn game-btn-secondary btn-test-preset-chip" data-preset-val="${preset.value}" data-target-branch="${preset.targetBranch}" style="font-size: 11px; padding: 6px 10px; min-height: 38px; display: inline-flex; align-items: center; gap: 6px;" title="${escapeHtml(preset.explanation)}">
+                <button type="button" class="game-btn game-btn-secondary btn-test-preset-chip" data-preset-val="${preset.value}" data-target-branch="${preset.targetBranch}" style="font-size: 11px; padding: 8px 12px; min-height: 44px; display: inline-flex; align-items: center; gap: 6px;" title="${escapeHtml(preset.explanation)}">
                   <span class="badge-pill" style="font-size: 9.5px; padding: 1px 5px; background: rgba(15, 118, 110, 0.15); color: var(--primary); font-weight: 700;">${escapeHtml(preset.badge)}</span>
                   <span>${escapeHtml(preset.label)}</span>
                 </button>
@@ -5201,9 +5222,10 @@ export class UIManager {
     // =========================================================================
     // ZONA 2: Meja Kerja Penelusuran Logika (Langkah 3 - Workbench 2-Kolom)
     // =========================================================================
-    const zoneWorkbench = document.createElement('div');
+    const zoneWorkbench = document.createElement('section');
     zoneWorkbench.className = 'tracing-workbench-container wizard-step-panel';
     zoneWorkbench.id = 'tracing-workbench-anchor';
+    zoneWorkbench.setAttribute('aria-label', 'Meja Kerja Tracing & Eksekusi');
 
     // 0. Banner Komparasi Hipotesis Real-Time (Dugaan Murid vs Keputusan Nyata Komputer)
     const hypothesisRibbon = document.createElement('div');
@@ -5357,12 +5379,7 @@ export class UIManager {
         </div>
       </div>
 
-      <!-- Seksi 5: Ringkasan Pengujian Kasus -->
-      <div class="tracing-console-section">
-        <div class="tips-callout" style="padding: 12px 14px; font-size: 11.5px; border-radius: 8px; line-height: 1.5;">
-          Ringkasan Pengujian: Masukan = <strong id="lkpd-note-input">${this.isInputApplied ? this.currentInputValue : '-'}</strong>, Dugaan = <strong id="lkpd-note-pred">${this.userPrediction || '-'}</strong>, Jalur Nyata = <strong id="lkpd-note-branch">-</strong>.
-        </div>
-      </div>
+
 
       <!-- Tombol Maju ke Langkah 4: Tarik Kesimpulan -->
       <div class="tracing-console-section" id="section-conclude-btn" style="margin-top: 8px;">
@@ -5380,8 +5397,9 @@ export class UIManager {
     // =========================================================================
     // ZONA 3: Hasil Pembuktian Hipotesis & Capaian Belajar (Langkah 4)
     // =========================================================================
-    const zoneEvaluation = document.createElement('div');
+    const zoneEvaluation = document.createElement('section');
     zoneEvaluation.className = 'tracing-zone-evaluation wizard-step-panel';
+    zoneEvaluation.setAttribute('aria-label', 'Zona Refleksi & Penarikan Kesimpulan');
     zoneEvaluation.style.cssText = `display: flex; flex-direction: column; gap: 14px;`;
 
     const evalHeader = document.createElement('div');
@@ -5540,16 +5558,7 @@ export class UIManager {
           ? (this.currentTraceResult?.executedBranch || '-')
           : (hasPrediction ? '(Menunggu langkah kondisi)' : '-');
       }
-      const lkpdInput = container.querySelector<HTMLElement>('#lkpd-note-input');
-      if (lkpdInput) lkpdInput.textContent = this.isInputApplied ? String(this.currentInputValue) : '-';
-      const lkpdPred = container.querySelector<HTMLElement>('#lkpd-note-pred');
-      if (lkpdPred) lkpdPred.textContent = this.userPrediction || '-';
-      const lkpdBranch = container.querySelector<HTMLElement>('#lkpd-note-branch');
-      if (lkpdBranch) {
-        lkpdBranch.textContent = isEvaluated
-          ? (this.currentTraceResult?.executedBranch || '-')
-          : (hasPrediction ? '(Menunggu langkah kondisi)' : '-');
-      }
+
 
       const btnJump = heroCard.querySelector<HTMLButtonElement>('#btn-jump-to-workbench');
       if (btnJump) {
@@ -5890,7 +5899,7 @@ export class UIManager {
       const testedBranches = prog?.testedBranches || [];
       const testedCount = testedBranches.length;
       const totalBranches = branchDefs.length;
-      const isDone = testedCount >= totalBranches || !!prog?.isCompleted;
+      const isDone = testedCount >= totalBranches;
       const isPartial = testedCount > 0 && !isDone;
       const defaultWeight = this.isCycle2Unlocked ? 20 : 30;
       const weight = mod.weightPoints || defaultWeight;
@@ -5903,17 +5912,17 @@ export class UIManager {
       const statusEl = card.querySelector<HTMLElement>('.case-card-status');
       if (statusEl) {
         if (isDone) {
-          statusEl.style.color = 'var(--success)';
-          statusEl.style.background = 'rgba(21, 128, 61, 0.12)';
-          statusEl.innerHTML = `${renderPixelIcon('check', 11, 'var(--success)')} <span>${testedCount}/${totalBranches} Cabang Selesai (${weight} Poin)</span>`;
+          statusEl.style.color = '#166534';
+          statusEl.style.background = 'rgba(21, 128, 61, 0.10)';
+          statusEl.innerHTML = `${renderPixelIcon('check', 11, '#166534')} <span>${testedCount}/${totalBranches} Cabang Selesai (${weight} Poin • 2 Bintang)</span>`;
         } else if (isPartial) {
-          statusEl.style.color = '#b45309';
-          statusEl.style.background = 'rgba(245, 158, 11, 0.14)';
-          statusEl.innerHTML = `${renderPixelIcon('target', 11, '#b45309')} <span>${testedCount}/${totalBranches} Cabang (Uji Cabang 2)</span>`;
+          statusEl.style.color = '#92400E';
+          statusEl.style.background = 'rgba(217, 119, 6, 0.10)';
+          statusEl.innerHTML = `${renderPixelIcon('target', 11, '#92400E')} <span>${testedCount}/${totalBranches} Cabang (${weight} Poin • Uji Cabang Lain)</span>`;
         } else {
-          statusEl.style.color = 'var(--text-muted)';
-          statusEl.style.background = 'var(--surface-code)';
-          statusEl.innerHTML = `${renderPixelIcon('refresh', 11, 'var(--text-muted)')} <span>0/${totalBranches} Cabang (${weight} Poin)</span>`;
+          statusEl.style.color = '#57534E';
+          statusEl.style.background = '#E7E5DF';
+          statusEl.innerHTML = `${renderPixelIcon('refresh', 11, '#57534E')} <span>0/${totalBranches} Cabang (${weight} Poin)</span>`;
         }
       }
     });
@@ -6362,16 +6371,9 @@ export class UIManager {
     // Dugaan tepat: catat cabang yang berhasil dibuktikan
     soundFx.playStepTick();
 
-    // Mode Latihan: nilai resmi sudah dikunci, jangan tulis ke storage
-    if (this.isTracingPracticeMode) {
-      this.goToTracingStep(4, false);
-      this.showMissionGuidanceToast(4);
-      this.showRetroToast(
-        'Dugaan tepat! Namun sesi ini adalah Mode Latihan -- nilai formatif resmimu tidak berubah.',
-        true
-      );
-      return;
-    }
+
+    // Mode Latihan: nilai resmi tetap terlindungi (tidak berubah), namun cabang baru tetap dicatat
+    // agar murid dapat melengkapi cakupan logika, mengumpulkan 2 Bintang modul, dan membuka Lencana.
 
     const rawOldProg = await StorageService.getModuleProgress(this.activeModule.id);
     const oldProg: ModuleProgress = rawOldProg || {
@@ -6473,7 +6475,14 @@ export class UIManager {
         : 'Pengujian cabang berhasil dicatat! Bintang 1 berhasil diraih. Arena Tantangan kini telah terbuka.';
       this.showRetroToast(toastMsg, true);
     } else if (stars > oldProg.stars) {
-      this.showRetroToast('Capaian bintang bertambah! Nilai pemahaman formatifmu meningkat.', true);
+      const starToastMsg = this.isTracingPracticeMode
+        ? 'Capaian bintang bertambah! Jalur cabang baru berhasil diuji (nilai resmi tetap aman).'
+        : 'Capaian bintang bertambah! Nilai pemahaman formatifmu meningkat.';
+      this.showRetroToast(starToastMsg, true);
+    } else if (this.isTracingPracticeMode) {
+      this.showRetroToast('Dugaan tepat! Jalur cabang ini sudah pernah diuji sebelumnya (nilai resmi tetap aman).', true);
+    } else {
+      this.showRetroToast('Dugaan tepat! Penelusuran logika berhasil dibuktikan.', true);
     }
   }
 
@@ -7302,15 +7311,6 @@ export class UIManager {
   private renderScreenProgres(): HTMLElement {
     const container = document.createElement('div');
     container.className = 'progres-page-container';
-    container.style.cssText = `
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      width: 100%;
-      max-width: 960px;
-      margin: 0 auto;
-      padding-bottom: 24px;
-    `;
 
     const formative = this.formativeScores || {
       tracingScore: 0,
@@ -7323,7 +7323,7 @@ export class UIManager {
       isBattleLocked: false,
       updatedAt: Date.now()
     };
-    const currentDriveUrl = StorageService.getDriveUrlSync();
+    const currentDriveUrl = StorageService.getDriveUrlSync(this.isCycle2Unlocked ? 2 : 1);
     const currentAbsenStr = this.session?.studentAbsen ? String(this.session.studentAbsen).padStart(2, '0') : 'XX';
     const currentCleanName = this.session?.studentName ? this.session.studentName.replace(/[^a-zA-Z0-9]/g, '') : 'NamaMurid';
     const expectedFilename = `iobranch_Siklus${this.isCycle2Unlocked ? '2' : '1'}_Absen${currentAbsenStr}_${currentCleanName}.txt`;
@@ -7355,7 +7355,7 @@ export class UIManager {
             </p>
           </div>
           <span style="font-family: var(--font-code); font-size: 11px; color: var(--warning); font-weight: bold; padding: 4px 8px; background: rgba(217, 119, 6, 0.08); border-radius: 6px; border: 1px solid rgba(217, 119, 6, 0.2);">
-            [${this.session ? (this.session.studentAbsen ? `Absen ${String(this.session.studentAbsen).padStart(2, '0')}` : this.session.pairId) : 'PROFIL BELUM TERDAFTAR'}]
+            [${this.session ? (this.session.studentAbsen ? `Absen ${String(this.session.studentAbsen).padStart(2, '0')}` : this.session.pairId) : 'Profil Belum Terdaftar'}]
           </span>
         </div>
 
@@ -7772,7 +7772,7 @@ export class UIManager {
                   </div>
                   ${this.lastCloudUploadResult.fileUrl ? `
                     <div style="margin-top: 6px;">
-                      <a href="${this.lastCloudUploadResult.fileUrl}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 4px 10px; min-height: 34px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                      <a href="${this.lastCloudUploadResult.fileUrl}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 8px 14px; min-height: 44px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
                         ${renderPixelIcon('drive', 12, 'currentColor')} Buka Berkas di Google Drive Guru
                       </a>
                     </div>
@@ -8283,196 +8283,203 @@ export class UIManager {
   // =================================================================
   private async showTeacherModal(): Promise<void> {
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
-    backdrop.style.cssText = `
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background-color: rgba(28, 25, 23, 0.75);
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 2000;
-      padding: 16px;
-    `;
+    backdrop.className = 'teacher-panel-backdrop';
 
-    const currentDriveUrl = await StorageService.getDriveUrl();
+    const initialCycle = this.isCycle2Unlocked ? 2 : 1;
+    const currentDriveUrl = await StorageService.getDriveUrl(initialCycle);
     let cycle2Selected = this.isCycle2Unlocked;
     let bypassSelected = this.progressionState?.teacherBypassMode ?? false;
 
     const content = document.createElement('div');
-    content.className = 'tactile-card';
-    content.style.cssText = `
-      max-width: 480px;
-      width: 100%;
-      padding: 22px;
-      background: #FFFFFF;
-      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
-      border: 2px solid var(--border-retro);
-      border-radius: 12px;
-      animation: celebrateScaleIn 0.22s ease-out;
-    `;
+    content.className = 'teacher-panel-modal tactile-card';
+    content.setAttribute('role', 'dialog');
+    content.setAttribute('aria-modal', 'true');
+    content.setAttribute('aria-label', 'Panel Fasilitator Guru');
 
     content.innerHTML = `
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 2px solid var(--border-retro); padding-bottom: 10px;">
+      <!-- Header Dialog (Sticky di Atas) -->
+      <div class="teacher-panel-header">
         <div style="display: flex; align-items: center; gap: 8px;">
           ${renderPixelIcon('gear', 16, 'var(--primary)')}
-          <span style="font-family: var(--font-pixel); font-size: 11.5px; color: var(--primary); letter-spacing: 0.5px;">
-            PANEL FASILITATOR GURU
+          <span style="font-family: var(--font-pixel); font-size: 11px; color: var(--primary); letter-spacing: 0.5px;">
+            Panel Fasilitator Guru
           </span>
         </div>
-        <button type="button" class="btn-close-modal" style="background: none; border: none; color: var(--text-muted); font-family: monospace; font-size: 14px; font-weight: bold; cursor: pointer; padding: 4px 8px;" title="Tutup">[X]</button>
+        <button type="button" class="btn-close-modal" aria-label="Tutup panel guru" style="background: none; border: 1.5px solid var(--border-retro); border-radius: 4px; color: var(--text-muted); font-family: var(--font-code); font-size: 13px; font-weight: bold; cursor: pointer; padding: 6px 10px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;" title="Tutup">[X]</button>
       </div>
 
-      <!-- Bagian 1: Verifikasi PIN Rahasia Guru -->
-      <div id="pin-verification-section">
-        <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px;">
-          Masukkan PIN Fasilitator Guru untuk membuka kendali materi Siklus 2, mode demonstrasi, dan konfigurasi pengumpulan tugas.
-        </p>
+      <!-- Body Dialog (Scrollable secara Mandiri) -->
+      <div class="teacher-panel-body">
+        <!-- Bagian 1: Verifikasi PIN Rahasia Guru -->
+        <div id="pin-verification-section">
+          <p style="font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 12px;">
+            Masukkan PIN Fasilitator Guru untuk membuka kendali materi Siklus 2, mode demonstrasi, dan konfigurasi pengumpulan tugas.
+          </p>
 
-        <div style="margin-bottom: 14px;">
-          <label style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
-            PIN Fasilitator Guru:
-          </label>
-          <input id="input-teacher-pin" type="password" maxlength="10" class="pixel-input" placeholder="Ketik PIN guru..." style="width: 100%; min-height: 46px; font-size: 14px; letter-spacing: 3px;" autofocus />
-          <div id="pin-err-msg" style="font-size: 11.5px; color: var(--danger); font-weight: 600; margin-top: 6px; display: none; align-items: center; gap: 6px;">
-            ${renderPixelIcon('target', 11, 'var(--danger)')} PIN salah. Akses ditolak.
+          <div style="margin-bottom: 12px;">
+            <label for="input-teacher-pin" style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
+              PIN Fasilitator Guru:
+            </label>
+            <input id="input-teacher-pin" type="password" maxlength="10" class="pixel-input" placeholder="Ketik PIN guru..." style="width: 100%; min-height: 44px; font-size: 14px; letter-spacing: 3px;" autofocus />
+            <div id="pin-err-msg" style="font-size: 11.5px; color: var(--danger); font-weight: 600; margin-top: 6px; display: none; align-items: center; gap: 6px;">
+              ${renderPixelIcon('target', 11, 'var(--danger)')} PIN salah. Akses ditolak.
+            </div>
           </div>
+
+          <button id="btn-verify-pin" type="button" class="game-btn game-btn-gold" style="width: 100%; min-height: 44px; font-size: 12px; font-family: var(--font-pixel);">
+            ${renderPixelIcon('play', 12, '#ffffff')} Verifikasi Akses Guru
+          </button>
         </div>
 
-        <button id="btn-verify-pin" type="button" class="game-btn game-btn-gold" style="width: 100%; min-height: 46px; font-size: 12px; font-family: var(--font-pixel);">
-          ${renderPixelIcon('play', 12, '#ffffff')} Verifikasi Akses Guru
-        </button>
+        <!-- Bagian 2: Kontrol Interaktif Guru (Aktif setelah PIN Terverifikasi) -->
+        <div id="teacher-controls" style="display: none; flex-direction: column; gap: 12px;">
+          
+          <!-- Grup 1: Kontrol Pembelajaran & Siklus -->
+          <div class="teacher-group-card">
+            <div style="font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+              ${renderPixelIcon('target', 12, 'var(--primary)')} Kontrol Pembelajaran &amp; Siklus
+            </div>
+
+            <!-- Item 1: Master Switch Siklus 2 -->
+            <div id="switch-trigger-row" class="teacher-toggle-item" role="button" tabindex="0" title="Klik untuk mengubah akses materi Siklus 2">
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <strong id="switch-title" style="font-size: 12.5px; color: var(--text-primary);">
+                    ${cycle2Selected ? 'Materi Siklus 2 Terbuka' : 'Materi Siklus 2 Terkunci'}
+                  </strong>
+                  <span id="cycle-badge-status" class="badge-pill" style="font-size: 9.5px; padding: 1px 6px; color: ${cycle2Selected ? 'var(--success)' : 'var(--warning-dark)'}; border-color: ${cycle2Selected ? 'var(--success)' : 'var(--warning)'}; background: ${cycle2Selected ? 'rgba(21, 128, 61, 0.1)' : 'rgba(217, 119, 6, 0.1)'};">
+                    ${cycle2Selected ? 'Siklus 2' : 'Siklus 1 Saja'}
+                  </span>
+                </div>
+                <p id="switch-subtitle" style="font-size: 11px; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.35;">
+                  ${cycle2Selected ? 'Modul 4 & 5 dapat langsung diakses oleh seluruh murid.' : 'Modul 4 & 5 terkunci agar murid fokus di materi dasar.'}
+                </p>
+              </div>
+              <div id="tactile-switch" class="tactile-switch-track ${cycle2Selected ? 'active' : ''}" role="switch" aria-checked="${cycle2Selected}">
+                <div class="tactile-switch-knob"></div>
+              </div>
+            </div>
+
+            <div style="height: 1px; background: var(--border-subtle); margin: 6px 0;"></div>
+
+            <!-- Item 2: Mode Demo Guru (Bypass) -->
+            <div id="bypass-trigger-row" class="teacher-toggle-item" role="button" tabindex="0" title="Klik untuk mengaktifkan/menonaktifkan bypass guru">
+              <div style="flex: 1; min-width: 0;">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <strong id="bypass-title" style="font-size: 12.5px; color: var(--text-primary);">
+                    ${bypassSelected ? 'Bypass Kunci Aktif' : 'Alur Bertahap Standar'}
+                  </strong>
+                  <span id="bypass-badge-status" class="badge-pill" style="font-size: 9.5px; padding: 1px 6px; color: ${bypassSelected ? 'var(--success)' : 'var(--text-muted)'}; border-color: ${bypassSelected ? 'var(--success)' : 'var(--border-retro)'}; background: ${bypassSelected ? 'rgba(21, 128, 61, 0.1)' : 'rgba(0, 0, 0, 0.05)'};">
+                    ${bypassSelected ? 'Bypass Aktif' : 'Normal'}
+                  </span>
+                </div>
+                <p id="bypass-subtitle" style="font-size: 11px; color: var(--text-secondary); margin: 2px 0 0; line-height: 1.35;">
+                  ${bypassSelected ? 'Semua menu dan gerbang terbuka bebas untuk demo guru.' : 'Murid menuntaskan langkah bertahap sesuai aturan.'}
+                </p>
+              </div>
+              <div id="tactile-bypass-switch" class="tactile-switch-track ${bypassSelected ? 'active' : ''}" role="switch" aria-checked="${bypassSelected}">
+                <div class="tactile-switch-knob"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Grup 2: Integrasi Google & Penilaian -->
+          <div class="teacher-group-card">
+            <div style="font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+              ${renderPixelIcon('drive', 12, 'var(--primary)')} Integrasi Google &amp; Asesmen
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <!-- Field 1: Google Drive -->
+              <div class="teacher-field-row">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 2px;">
+                  <label for="input-drive-url" style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
+                    Folder Google Drive (Laporan Murid):
+                  </label>
+                  <span id="drive-cycle-indicator" class="badge-pill" style="font-size: 9px; padding: 1px 6px; color: var(--primary); border-color: var(--border-subtle); background: var(--surface-panel-alt);">
+                    ${StorageService.isDefaultDriveUrl(currentDriveUrl) ? (cycle2Selected ? 'Otomatis: Siklus 2' : 'Otomatis: Siklus 1') : 'Kustom Guru'}
+                  </span>
+                </div>
+                <div class="teacher-field-input-group">
+                  <input id="input-drive-url" type="text" class="pixel-input" value="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" placeholder="https://drive.google.com/..." style="flex: 1; min-height: 38px; font-size: 11.5px; padding: 6px 10px;" />
+                  <a id="btn-test-drive" href="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 0 10px; min-height: 38px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Buka tautan folder Drive di tab baru">
+                    ${renderPixelIcon('drive', 12, 'currentColor')} <span>Tes</span>
+                  </a>
+                  <button id="btn-reset-drive" type="button" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 0 8px; min-height: 38px; display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0;" title="Kembalikan ke folder resmi bawaan siklus yang aktif">
+                    ${renderPixelIcon('refresh', 11, 'currentColor')} <span>Bawaan</span>
+                  </button>
+                </div>
+                <div id="drive-sync-hint" style="font-size: 10px; color: var(--text-secondary); margin-top: 2px; line-height: 1.35;">
+                  Tautan otomatis menyesuaikan saat saklar siklus diganti (tanpa perlu input manual).
+                </div>
+              </div>
+
+              <!-- Field 2: Web App GAS -->
+              <div class="teacher-field-row">
+                <label for="input-teacher-gas-url" style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
+                  Endpoint Google Apps Script (1-Klik Upload):
+                </label>
+                <div class="teacher-field-input-group">
+                  <input id="input-teacher-gas-url" type="url" class="pixel-input" value="${escapeHtml(StorageService.getGasApiUrlSync())}" placeholder="https://script.google.com/macros/s/.../exec" style="flex: 1; min-height: 38px; font-size: 11px; font-family: var(--font-code); padding: 6px 10px;" />
+                  <button id="btn-test-teacher-gas" type="button" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 0 10px; min-height: 38px; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Uji ketersediaan endpoint Web App">
+                    ${renderPixelIcon('refresh', 11, 'currentColor')} <span>Uji</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Field 3: Google Form Posttest -->
+              <div class="teacher-field-row">
+                <label for="input-teacher-posttest-url" style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
+                  Google Form Posttest Pembelajaran:
+                </label>
+                <div class="teacher-field-input-group">
+                  <input id="input-teacher-posttest-url" type="url" class="pixel-input" value="${escapeHtml(StorageService.getPosttestUrlSync())}" placeholder="https://forms.gle/..." style="flex: 1; min-height: 38px; font-size: 11.5px; padding: 6px 10px;" />
+                  <a id="btn-test-posttest" href="${escapeHtml(StorageService.getPosttestUrlSync())}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 10.5px; padding: 0 10px; min-height: 38px; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;" title="Buka form di tab baru">
+                    ${renderPixelIcon('document', 12, 'currentColor')} <span>Tes</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      <!-- Bagian 2: Kontrol Interaktif Guru (Aktif setelah PIN Terverifikasi) -->
-      <div id="teacher-controls" style="display: none; flex-direction: column; gap: 14px;">
-        <!-- Kartu Master Switch Siklus 2 -->
-        <div id="cycle-master-card" class="tactile-panel" style="padding: 14px 16px; border: 2px solid ${cycle2Selected ? 'var(--primary)' : 'var(--warning)'}; background: ${cycle2Selected ? 'rgba(15, 118, 110, 0.06)' : 'var(--surface-panel-alt)'}; transition: all 0.2s ease;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 6px;">
-            <span class="eyebrow-label" style="color: ${cycle2Selected ? 'var(--primary)' : 'var(--warning)'};">
-              Master Switch Materi Siklus 2
-            </span>
-            <span id="cycle-badge-status" class="badge-pill" style="font-family: var(--font-code); font-size: 10px; font-weight: 700; color: ${cycle2Selected ? 'var(--success)' : 'var(--warning)'}; border-color: ${cycle2Selected ? 'var(--success)' : 'var(--warning)'}; background: ${cycle2Selected ? 'rgba(21, 128, 61, 0.1)' : 'rgba(217, 119, 6, 0.1)'}; display: inline-flex; align-items: center; gap: 4px;">
-              ${cycle2Selected ? `${renderPixelIcon('unlock', 11, 'var(--success)')} Siklus 2 Terbuka` : `${renderPixelIcon('lock', 11, 'var(--warning)')} Siklus 1 Saja`}
-            </span>
-          </div>
-
-          <!-- Tuas Saklar Interaktif Siklus 2 -->
-          <div id="switch-trigger-row" style="display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; padding: 6px 0;">
-            <div style="flex: 1;">
-              <div id="switch-title" style="font-size: 13.5px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px;">
-                ${cycle2Selected ? 'Buka Kunci Materi Siklus 2' : 'Materi Siklus 2 Terkunci'}
-              </div>
-              <p id="switch-subtitle" style="font-size: 11.5px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
-                ${cycle2Selected ? 'Modul 4 & 5 dapat diakses langsung oleh seluruh murid.' : 'Modul 4 & 5 disembunyikan agar murid fokus di materi dasar.'}
-              </p>
-            </div>
-
-            <div id="tactile-switch" class="tactile-switch-track ${cycle2Selected ? 'active' : ''}" role="switch" aria-checked="${cycle2Selected}" title="Klik untuk mengganti status siklus">
-              <div class="tactile-switch-knob"></div>
-            </div>
-          </div>
-
-          <!-- Live Preview Status Modul yang Terdampak -->
-          <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-retro);">
-            <div class="cycle-module-pill ${cycle2Selected ? 'unlocked' : ''}">
-              <span style="font-family: var(--font-code); font-size: 11px; font-weight: 600;">Modul 4: Klasifikasi Paket Data (Else-If)</span>
-              <span class="mod-status-text" style="font-family: var(--font-pixel); font-size: 9px; color: ${cycle2Selected ? 'var(--success)' : 'var(--text-muted)'}; font-weight: bold;">
-                ${cycle2Selected ? 'Terbuka' : 'Terkunci'}
-              </span>
-            </div>
-            <div class="cycle-module-pill ${cycle2Selected ? 'unlocked' : ''}">
-              <span style="font-family: var(--font-code); font-size: 11px; font-weight: 600;">Modul 5: Pemilih Menu Minuman (Switch-Case)</span>
-              <span class="mod-status-text" style="font-family: var(--font-pixel); font-size: 9px; color: ${cycle2Selected ? 'var(--success)' : 'var(--text-muted)'}; font-weight: bold;">
-                ${cycle2Selected ? 'Terbuka' : 'Terkunci'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Kartu Mode Bebas Guru (Bypass Prosedur) -->
-        <div id="bypass-master-card" class="tactile-panel" style="padding: 14px 16px; border: 2px solid ${bypassSelected ? 'var(--primary)' : 'var(--border-retro)'}; background: ${bypassSelected ? 'rgba(15, 118, 110, 0.06)' : 'var(--surface-panel-alt)'}; transition: all 0.2s ease;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
-            <span class="eyebrow-label" style="color: ${bypassSelected ? 'var(--primary)' : 'var(--text-secondary)'};">
-              Mode Demo Guru (Bypass Prosedur)
-            </span>
-            <span id="bypass-badge-status" class="badge-pill" style="font-family: var(--font-code); font-size: 10px; font-weight: 700; color: ${bypassSelected ? 'var(--success)' : 'var(--text-muted)'}; border-color: ${bypassSelected ? 'var(--success)' : 'var(--border-retro)'}; background: ${bypassSelected ? 'rgba(21, 128, 61, 0.1)' : 'rgba(0, 0, 0, 0.05)'}; display: inline-flex; align-items: center; gap: 4px;">
-              ${bypassSelected ? `${renderPixelIcon('unlock', 11, 'var(--success)')} Bypass Aktif` : `${renderPixelIcon('lock', 11, 'var(--text-muted)')} Terkunci Normal`}
-            </span>
-          </div>
-
-          <div id="bypass-trigger-row" style="display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; padding: 4px 0;">
-            <div style="flex: 1;">
-              <div id="bypass-title" style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px;">
-                ${bypassSelected ? 'Bypass Kunci Aktif (Bebas Akses)' : 'Alur Bertahap Standar Murid'}
-              </div>
-              <p id="bypass-subtitle" style="font-size: 11px; color: var(--text-secondary); margin: 0; line-height: 1.4;">
-                ${bypassSelected ? 'Semua menu dan gerbang dapat diakses langsung untuk demo pembelajaran guru.' : 'Murid wajib menyelesaikan langkah secara bertahap sesuai prosedur.'}
-              </p>
-            </div>
-
-            <div id="tactile-bypass-switch" class="tactile-switch-track ${bypassSelected ? 'active' : ''}" role="switch" aria-checked="${bypassSelected}" title="Klik untuk mengaktifkan/menonaktifkan bypass guru">
-              <div class="tactile-switch-knob"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Pengaturan Google Drive Guru -->
-        <div>
-          <label style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
-            Tautan Google Drive Pengumpulan Tugas:
-          </label>
-          <div style="display: flex; gap: 8px;">
-            <input id="input-drive-url" type="text" class="pixel-input" value="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" style="flex: 1; min-height: 42px; font-size: 12px;" />
-            <a id="btn-test-drive" href="${escapeHtml(sanitizeWebUrl(currentDriveUrl))}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; text-decoration: none; display: flex; align-items: center;" title="Uji tautan di tab baru">
-              ${renderPixelIcon('drive', 13, 'currentColor')} Tes Tautan
-            </a>
-          </div>
-        </div>
-
-        <!-- Pengaturan Google Apps Script Web App (1-Klik Upload Langsung) -->
-        <div>
-          <label style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
-            URL Web App Google Apps Script (1-Klik Upload):
-          </label>
-          <div style="display: flex; gap: 8px;">
-            <input id="input-teacher-gas-url" type="url" class="pixel-input" value="${escapeHtml(StorageService.getGasApiUrlSync())}" placeholder="https://script.google.com/macros/s/.../exec" style="flex: 1; min-height: 42px; font-size: 12px; font-family: var(--font-code);" />
-            <button id="btn-test-teacher-gas" type="button" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; display: inline-flex; align-items: center; gap: 4px;" title="Uji status endpoint Web App">
-              ${renderPixelIcon('refresh', 12, 'currentColor')} Uji Status
-            </button>
-          </div>
-        </div>
-
-        <!-- Pengaturan Google Form Posttest Pembelajaran -->
-        <div>
-          <label style="display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 6px; color: var(--text-primary);">
-            Tautan Google Form Posttest Pembelajaran:
-          </label>
-          <div style="display: flex; gap: 8px;">
-            <input id="input-teacher-posttest-url" type="url" class="pixel-input" value="${escapeHtml(StorageService.getPosttestUrlSync())}" placeholder="https://forms.gle/..." style="flex: 1; min-height: 42px; font-size: 12px; font-family: var(--font-code);" />
-            <a id="btn-test-posttest" href="${escapeHtml(StorageService.getPosttestUrlSync())}" target="_blank" rel="noopener noreferrer" class="game-btn game-btn-secondary" style="font-size: 11px; padding: 0 12px; min-height: 42px; text-decoration: none; display: flex; align-items: center; gap: 4px;" title="Uji tautan di tab baru">
-              ${renderPixelIcon('document', 13, 'currentColor')} Tes Tautan
-            </a>
-          </div>
-        </div>
-
-        <!-- Tombol Aksi Simpan -->
-        <button id="btn-save-teacher" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 48px; font-size: 13px; font-weight: 700; gap: 8px; margin-top: 4px;">
+      <!-- Footer Dialog (Sticky di Bawah) -->
+      <div id="teacher-panel-footer-actions" class="teacher-panel-footer" style="display: none;">
+        <button id="btn-save-teacher" type="button" class="game-btn game-btn-primary" style="width: 100%; min-height: 44px; font-size: 12.5px; font-weight: 700; gap: 8px;">
           ${renderPixelIcon('check', 13, '#ffffff')} Simpan Pengaturan Guru
         </button>
       </div>
     `;
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const closeModal = () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      backdrop.remove();
+    };
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        closeModal();
+      }
+    });
+
     const closeBtn = content.querySelector('.btn-close-modal');
-    closeBtn?.addEventListener('click', () => backdrop.remove());
+    closeBtn?.addEventListener('click', closeModal);
 
     const pinSection = content.querySelector<HTMLElement>('#pin-verification-section');
     const pinInput = content.querySelector<HTMLInputElement>('#input-teacher-pin');
     const pinErr = content.querySelector<HTMLElement>('#pin-err-msg');
     const btnVerify = content.querySelector<HTMLButtonElement>('#btn-verify-pin');
     const controls = content.querySelector<HTMLElement>('#teacher-controls');
+    const footerActions = content.querySelector<HTMLElement>('#teacher-panel-footer-actions');
 
     const handleVerify = async () => {
       if (btnVerify && btnVerify.disabled) return;
@@ -8484,6 +8491,7 @@ export class UIManager {
           if (pinErr) pinErr.style.display = 'none';
           if (pinSection) pinSection.style.display = 'none';
           if (controls) controls.style.display = 'flex';
+          if (footerActions) footerActions.style.display = 'flex';
           soundFx.playLogicTrue();
         } else {
           if (pinErr) {
@@ -8508,52 +8516,52 @@ export class UIManager {
     // Handler Interaksi Saklar Utama Siklus 2
     const switchTrack = content.querySelector<HTMLElement>('#tactile-switch');
     const triggerRow = content.querySelector<HTMLElement>('#switch-trigger-row');
-    const masterCard = content.querySelector<HTMLElement>('#cycle-master-card');
     const badgeStatus = content.querySelector<HTMLElement>('#cycle-badge-status');
     const switchTitle = content.querySelector<HTMLElement>('#switch-title');
     const switchSubtitle = content.querySelector<HTMLElement>('#switch-subtitle');
-    const modulePills = content.querySelectorAll<HTMLElement>('.cycle-module-pill');
-    const statusTexts = content.querySelectorAll<HTMLElement>('.mod-status-text');
 
     const toggleCycleSwitch = () => {
       cycle2Selected = !cycle2Selected;
+      const targetCycle = cycle2Selected ? 2 : 1;
+      const targetDriveUrl = DRIVE_CYCLE_URLS[targetCycle] || DEFAULT_DRIVE_URL;
 
       // Update Switch Lever Visual
       switchTrack?.classList.toggle('active', cycle2Selected);
       switchTrack?.setAttribute('aria-checked', String(cycle2Selected));
 
-      // Update Card Visual
-      if (masterCard) {
-        masterCard.style.borderColor = cycle2Selected ? 'var(--primary)' : 'var(--warning)';
-        masterCard.style.background = cycle2Selected ? 'rgba(15, 118, 110, 0.06)' : 'var(--surface-panel-alt)';
-      }
-
       // Update Badge Status
       if (badgeStatus) {
-        badgeStatus.innerHTML = cycle2Selected
-          ? `${renderPixelIcon('unlock', 11, 'var(--success)')} SIKLUS 2 TERBUKA`
-          : `${renderPixelIcon('lock', 11, 'var(--warning)')} SIKLUS 1 SAJA`;
-        badgeStatus.style.color = cycle2Selected ? 'var(--success)' : 'var(--warning)';
+        badgeStatus.innerHTML = cycle2Selected ? 'Siklus 2' : 'Siklus 1 Saja';
+        badgeStatus.style.color = cycle2Selected ? 'var(--success)' : 'var(--warning-dark)';
         badgeStatus.style.borderColor = cycle2Selected ? 'var(--success)' : 'var(--warning)';
         badgeStatus.style.background = cycle2Selected ? 'rgba(21, 128, 61, 0.1)' : 'rgba(217, 119, 6, 0.1)';
       }
 
       // Update Label Teks
       if (switchTitle) {
-        switchTitle.textContent = cycle2Selected ? 'Buka Kunci Materi Siklus 2' : 'Materi Siklus 2 Terkunci';
+        switchTitle.textContent = cycle2Selected ? 'Materi Siklus 2 Terbuka' : 'Materi Siklus 2 Terkunci';
       }
       if (switchSubtitle) {
         switchSubtitle.textContent = cycle2Selected
-          ? 'Modul 4 & 5 dapat diakses langsung oleh seluruh murid.'
-          : 'Modul 4 & 5 disembunyikan agar murid fokus di materi dasar.';
+          ? 'Modul 4 & 5 dapat langsung diakses oleh seluruh murid.'
+          : 'Modul 4 & 5 terkunci agar murid fokus di materi dasar.';
       }
 
-      // Update Modul Preview Pills
-      modulePills.forEach((p) => p.classList.toggle('unlocked', cycle2Selected));
-      statusTexts.forEach((st) => {
-        st.textContent = cycle2Selected ? 'TERBUKA' : 'TERKUNCI';
-        st.style.color = cycle2Selected ? 'var(--success)' : 'var(--text-muted)';
-      });
+      // Update otomatis URL Drive jika pengguna memakai URL bawaan (atau input kosong/sesuai default siklus 1/2)
+      const currentVal = driveInput?.value.trim() || '';
+      const isUsingDefault = StorageService.isDefaultDriveUrl(currentVal);
+
+      if (isUsingDefault && driveInput) {
+        driveInput.value = targetDriveUrl;
+        if (driveTestBtn) driveTestBtn.href = targetDriveUrl;
+      }
+
+      const driveIndicator = content.querySelector<HTMLElement>('#drive-cycle-indicator');
+      if (driveIndicator) {
+        const isStillDefault = StorageService.isDefaultDriveUrl(driveInput?.value.trim());
+        driveIndicator.textContent = isStillDefault ? (cycle2Selected ? 'Otomatis: Siklus 2' : 'Otomatis: Siklus 1') : 'Kustom Guru';
+        driveIndicator.style.color = isStillDefault ? 'var(--primary)' : 'var(--warning-dark)';
+      }
 
       // Suara Feedback Haptik
       if (cycle2Selected) {
@@ -8564,11 +8572,16 @@ export class UIManager {
     };
 
     triggerRow?.addEventListener('click', toggleCycleSwitch);
+    triggerRow?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleCycleSwitch();
+      }
+    });
 
     // Handler Interaksi Saklar Bypass Guru
     const bypassTrack = content.querySelector<HTMLElement>('#tactile-bypass-switch');
     const bypassTriggerRow = content.querySelector<HTMLElement>('#bypass-trigger-row');
-    const bypassCard = content.querySelector<HTMLElement>('#bypass-master-card');
     const bypassBadge = content.querySelector<HTMLElement>('#bypass-badge-status');
     const bypassTitle = content.querySelector<HTMLElement>('#bypass-title');
     const bypassSubtitle = content.querySelector<HTMLElement>('#bypass-subtitle');
@@ -8579,27 +8592,20 @@ export class UIManager {
       bypassTrack?.classList.toggle('active', bypassSelected);
       bypassTrack?.setAttribute('aria-checked', String(bypassSelected));
 
-      if (bypassCard) {
-        bypassCard.style.borderColor = bypassSelected ? 'var(--primary)' : 'var(--border-retro)';
-        bypassCard.style.background = bypassSelected ? 'rgba(15, 118, 110, 0.06)' : 'var(--surface-panel-alt)';
-      }
-
       if (bypassBadge) {
-        bypassBadge.innerHTML = bypassSelected
-          ? `${renderPixelIcon('unlock', 11, 'var(--success)')} BYPASS AKTIF`
-          : `${renderPixelIcon('lock', 11, 'var(--text-muted)')} TERKUNCI NORMAL`;
+        bypassBadge.innerHTML = bypassSelected ? 'Bypass Aktif' : 'Normal';
         bypassBadge.style.color = bypassSelected ? 'var(--success)' : 'var(--text-muted)';
         bypassBadge.style.borderColor = bypassSelected ? 'var(--success)' : 'var(--border-retro)';
         bypassBadge.style.background = bypassSelected ? 'rgba(21, 128, 61, 0.1)' : 'rgba(0, 0, 0, 0.05)';
       }
 
       if (bypassTitle) {
-        bypassTitle.textContent = bypassSelected ? 'Bypass Kunci Aktif (Bebas Akses)' : 'Alur Bertahap Standar Murid';
+        bypassTitle.textContent = bypassSelected ? 'Bypass Kunci Aktif' : 'Alur Bertahap Standar';
       }
       if (bypassSubtitle) {
         bypassSubtitle.textContent = bypassSelected
-          ? 'Semua menu dan gerbang dapat diakses langsung untuk demo pembelajaran guru.'
-          : 'Murid wajib menyelesaikan langkah secara bertahap sesuai prosedur.';
+          ? 'Semua menu dan gerbang terbuka bebas untuk demo guru.'
+          : 'Murid menuntaskan langkah bertahap sesuai aturan.';
       }
 
       if (bypassSelected) {
@@ -8610,15 +8616,42 @@ export class UIManager {
     };
 
     bypassTriggerRow?.addEventListener('click', toggleBypassSwitch);
+    bypassTriggerRow?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggleBypassSwitch();
+      }
+    });
 
     // Sinkronisasi Live URL Google Drive
     const driveInput = content.querySelector<HTMLInputElement>('#input-drive-url');
     const driveTestBtn = content.querySelector<HTMLAnchorElement>('#btn-test-drive');
+    const driveIndicator = content.querySelector<HTMLElement>('#drive-cycle-indicator');
+    const btnResetDrive = content.querySelector<HTMLButtonElement>('#btn-reset-drive');
+
     driveInput?.addEventListener('input', () => {
       const val = driveInput.value.trim();
       if (driveTestBtn) {
         driveTestBtn.href = val || '#';
       }
+      if (driveIndicator) {
+        const isStillDefault = StorageService.isDefaultDriveUrl(val);
+        driveIndicator.textContent = isStillDefault ? (cycle2Selected ? 'Otomatis: Siklus 2' : 'Otomatis: Siklus 1') : 'Kustom Guru';
+        driveIndicator.style.color = isStillDefault ? 'var(--primary)' : 'var(--warning-dark)';
+      }
+    });
+
+    btnResetDrive?.addEventListener('click', () => {
+      const targetCycle = cycle2Selected ? 2 : 1;
+      const targetDriveUrl = DRIVE_CYCLE_URLS[targetCycle] || DEFAULT_DRIVE_URL;
+      if (driveInput) driveInput.value = targetDriveUrl;
+      if (driveTestBtn) driveTestBtn.href = targetDriveUrl;
+      if (driveIndicator) {
+        driveIndicator.textContent = cycle2Selected ? 'Otomatis: Siklus 2' : 'Otomatis: Siklus 1';
+        driveIndicator.style.color = 'var(--primary)';
+      }
+      soundFx.playButtonBlip();
+      this.showRetroToast(`Folder Drive dikembalikan ke bawaan Siklus ${targetCycle}.`, true);
     });
 
     // Sinkronisasi Live URL Google Form Posttest Pembelajaran
@@ -8660,8 +8693,12 @@ export class UIManager {
     // Simpan Pengaturan Guru
     const btnSave = content.querySelector<HTMLButtonElement>('#btn-save-teacher');
     btnSave?.addEventListener('click', async () => {
-      const rawDrive = driveInput?.value.trim() || currentDriveUrl;
-      const driveUrl = sanitizeWebUrl(rawDrive);
+      const targetCycle = cycle2Selected ? 2 : 1;
+      const defaultUrlForTarget = DRIVE_CYCLE_URLS[targetCycle] || DEFAULT_DRIVE_URL;
+      const rawDrive = driveInput?.value.trim() || defaultUrlForTarget;
+      const isDefault = StorageService.isDefaultDriveUrl(rawDrive);
+      const sanitized = sanitizeWebUrl(rawDrive);
+      const driveUrl = isDefault ? defaultUrlForTarget : (sanitized || defaultUrlForTarget);
       const isNewlyUnlocked = cycle2Selected && !this.isCycle2Unlocked;
 
       const teacherGasInput = content.querySelector<HTMLInputElement>('#input-teacher-gas-url');
@@ -8674,7 +8711,7 @@ export class UIManager {
         await StorageService.setPosttestUrl(teacherPosttestUrl);
       }
 
-      await StorageService.setCycleState(cycle2Selected ? 2 : 1);
+      await StorageService.setCycleState(targetCycle as 1 | 2);
       await StorageService.setDriveUrl(driveUrl);
       this.isCycle2Unlocked = cycle2Selected;
 
@@ -8682,7 +8719,7 @@ export class UIManager {
       const updatedProgression = await StorageService.setTeacherBypassMode(bypassSelected);
       this.progressionState = updatedProgression;
 
-      backdrop.remove();
+      closeModal();
       this.renderGlobalHeader();
       this.render();
 
@@ -8758,6 +8795,9 @@ export class UIManager {
 
     const content = document.createElement('div');
     content.className = 'tactile-card';
+    content.setAttribute('role', 'dialog');
+    content.setAttribute('aria-modal', 'true');
+    content.setAttribute('aria-label', 'Akses Gerbang Siklus 2');
     content.style.cssText = `
       max-width: 440px;
       width: 100%;
@@ -8777,7 +8817,7 @@ export class UIManager {
             Akses Gerbang Siklus 2
           </span>
         </div>
-        <button type="button" class="btn-close-modal" style="background: none; border: none; color: var(--text-muted); font-family: monospace; font-size: 14px; font-weight: bold; cursor: pointer; padding: 4px 8px;" title="Tutup">[X]</button>
+        <button type="button" class="btn-close-modal" aria-label="Tutup modal token" style="background: none; border: 1.5px solid var(--border-retro); border-radius: 4px; color: var(--text-muted); font-family: var(--font-code); font-size: 13px; font-weight: bold; cursor: pointer; padding: 8px 12px; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;" title="Tutup">[X]</button>
       </div>
 
       <div style="text-align: center; margin-bottom: 16px;">
@@ -8806,15 +8846,32 @@ export class UIManager {
         <button id="btn-submit-token" type="button" class="game-btn game-btn-gold" style="width: 100%; min-height: 46px; font-size: 12px; font-family: var(--font-pixel); gap: 8px;">
           ${renderPixelIcon('check', 13, '#ffffff')} Buka Gerbang Siklus 2
         </button>
-        <button id="btn-cancel-token" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 40px; font-size: 11.5px;">
+        <button id="btn-cancel-token" type="button" class="game-btn game-btn-secondary" style="width: 100%; min-height: 44px; font-size: 11.5px;">
           Kembali
         </button>
       </div>
     `;
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const handleClose = () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      backdrop.remove();
+    };
+
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        handleClose();
+      }
+    });
+
     const closeBtn = content.querySelector('.btn-close-modal');
     const cancelBtn = content.querySelector('#btn-cancel-token');
-    const handleClose = () => backdrop.remove();
     closeBtn?.addEventListener('click', handleClose);
     cancelBtn?.addEventListener('click', handleClose);
 
@@ -8831,7 +8888,7 @@ export class UIManager {
         if (isValid) {
           this.isCycle2Unlocked = true;
           this.formativeScores = await StorageService.getFormativeScores();
-          backdrop.remove();
+          handleClose();
 
           if (targetModuleId) {
             const target = CASE_MODULES.find((m) => m.id === targetModuleId);
@@ -8903,7 +8960,7 @@ export class UIManager {
     `;
 
     overlay.innerHTML = `
-      <div class="celebrate-modal-card tactile-card" style="
+      <div class="celebrate-modal-card tactile-card" role="dialog" aria-modal="true" aria-label="Gerbang Siklus 2 Terbuka" style="
         max-width: 440px;
         width: 100%;
         text-align: center;
@@ -8917,9 +8974,6 @@ export class UIManager {
           ${renderPixelIcon('star', 28, 'var(--primary)')}
         </div>
 
-        <div class="eyebrow-label" style="color: var(--primary); margin-bottom: 4px;">
-          ${isStudent ? 'Token Kelas Terverifikasi' : 'Pengaturan Guru Diterapkan'}
-        </div>
         <h2 style="font-family: var(--font-pixel); font-size: 15px; color: var(--primary); margin: 0 0 10px; letter-spacing: 0.5px;">
           Gerbang Siklus 2 Terbuka!
         </h2>
@@ -8945,9 +8999,27 @@ export class UIManager {
       </div>
     `;
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeOverlay();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const closeOverlay = () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      overlay.remove();
+    };
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeOverlay();
+      }
+    });
+
     overlay.querySelector('#btn-close-celebrate')?.addEventListener('click', () => {
       soundFx.playButtonBlip();
-      overlay.remove();
+      closeOverlay();
     });
 
     document.body.appendChild(overlay);
@@ -8961,6 +9033,9 @@ export class UIManager {
     if (!container) {
       container = document.createElement('div');
       container.className = 'retro-toast-container';
+      container.setAttribute('role', 'status');
+      container.setAttribute('aria-live', 'polite');
+      container.setAttribute('aria-atomic', 'true');
       document.body.appendChild(container);
     }
 
@@ -8975,6 +9050,7 @@ export class UIManager {
 
     const toast = document.createElement('div');
     toast.className = `retro-toast-pill ${isSuccess ? 'retro-toast-success' : 'retro-toast-warning'}`;
+    toast.setAttribute('role', 'status');
     toast.innerHTML = `
       <span class="retro-toast-icon">
         ${renderPixelIcon(isSuccess ? 'check' : 'bulb', 13, isSuccess ? '#0F766E' : '#D97706')}

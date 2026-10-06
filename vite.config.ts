@@ -10,8 +10,9 @@ export default defineConfig({
         name: 'iobranch - Belajar Percabangan Logika',
         short_name: 'iobranch',
         description: 'Media PWA Gamifikasi Pembelajaran Percabangan 2D Pixel untuk Informatika',
-        theme_color: '#090e17',
-        background_color: '#090e17',
+        theme_color: '#0F766E',
+        background_color: '#F7F5F0',
+        lang: 'id',
         display: 'standalone',
         orientation: 'portrait-primary',
         icons: [
