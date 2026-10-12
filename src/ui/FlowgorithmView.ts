@@ -1,7 +1,5 @@
 // src/ui/FlowgorithmView.ts - Visualisasi Diagram Alir Minimalis Standar Flowgorithm (Anti-Slop Standard)
 // Merender diagram alir berbasis SVG vektor murni yang ringan, tajam, dan responsif.
-import { renderPixelIcon } from './UIManager';
-
 export class FlowgorithmView {
   private container: HTMLElement;
   private currentModuleId: string = 'm01';
@@ -52,38 +50,6 @@ export class FlowgorithmView {
 
   private render(): void {
     this.container.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 10px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: rgba(15, 118, 110, 0.1);">
-            ${renderPixelIcon('target', 13, 'var(--primary)')}
-          </span>
-          <div>
-            <div style="font-family: var(--font-ui); font-size: 12px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
-              Diagram Alir Logika
-              <span style="font-size: 9px; font-family: var(--font-code); font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(15, 118, 110, 0.08); color: var(--primary);">
-                Standar Flowgorithm
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Indikator Legenda Simbol -->
-        <div style="display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-muted); font-family: var(--font-code); flex-wrap: wrap;">
-          <span style="display: inline-flex; align-items: center; gap: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--success);"></span>
-            True (Benar)
-          </span>
-          <span style="display: inline-flex; align-items: center; gap: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--danger);"></span>
-            False (Salah)
-          </span>
-          <span style="display: inline-flex; align-items: center; gap: 4px;">
-            <span style="width: 8px; height: 8px; border-radius: 2px; background: var(--warning);"></span>
-            Aktif
-          </span>
-        </div>
-      </div>
-
       <!-- Kanvas SVG Diagram Alir -->
       <div class="flowgorithm-canvas-box">
         ${this.buildSvgContent()}

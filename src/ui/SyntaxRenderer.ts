@@ -85,17 +85,17 @@ export class SyntaxRenderer {
       background: #18181b;
       border: 1.5px solid #27272a;
       border-radius: 10px;
-      padding: 14px;
+      padding: 10px 12px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
       width: 100%;
       box-sizing: border-box;
     `;
 
     this.container.innerHTML = `
-      <div class="syntax-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+      <div class="syntax-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 6px; flex-wrap: wrap; gap: 6px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="display: inline-flex; width: 8px; height: 8px; border-radius: 50%; background: #10b981; flex-shrink: 0;"></span>
           <span style="font-family: var(--font-code); font-size: 11px; font-weight: 700; color: #e4e4e7; letter-spacing: 0.4px;">
@@ -104,9 +104,9 @@ export class SyntaxRenderer {
         </div>
         <div class="syntax-switch" style="display: inline-flex; border: 1px solid #3f3f46; border-radius: 6px; overflow: hidden; background-color: #27272a; padding: 2px; gap: 2px;">
           <button type="button" class="syntax-toggle-btn ${this.currentMode === 'pseudo' ? 'active' : ''}" data-mode="pseudo" style="
-            padding: 4px 10px;
+            padding: 3px 8px;
             font-family: var(--font-code);
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 700;
             background-color: ${this.currentMode === 'pseudo' ? 'var(--primary)' : 'transparent'};
             color: ${this.currentMode === 'pseudo' ? '#ffffff' : '#a1a1aa'};
@@ -118,9 +118,9 @@ export class SyntaxRenderer {
             Pseudocode
           </button>
           <button type="button" class="syntax-toggle-btn ${this.currentMode === 'c' ? 'active' : ''}" data-mode="c" style="
-            padding: 4px 10px;
+            padding: 3px 8px;
             font-family: var(--font-code);
-            font-size: 10.5px;
+            font-size: 10px;
             font-weight: 700;
             background-color: ${this.currentMode === 'c' ? 'var(--primary)' : 'transparent'};
             color: ${this.currentMode === 'c' ? '#ffffff' : '#a1a1aa'};
@@ -133,8 +133,8 @@ export class SyntaxRenderer {
           </button>
         </div>
       </div>
-      <div class="code-container" style="width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 6px 0; box-sizing: border-box;">
-        <div class="code-lines-body" style="display: flex; flex-direction: column; gap: 2px; min-width: 100%; width: max-content;">
+      <div class="code-container" style="width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px 0; box-sizing: border-box; scrollbar-width: thin;">
+        <div class="code-lines-body" style="display: flex; flex-direction: column; gap: 2px; width: 100%; min-width: 100%; box-sizing: border-box;">
           ${this.generateLinesHtml()}
         </div>
       </div>
@@ -162,11 +162,11 @@ export class SyntaxRenderer {
         const highlighted = this.highlightSyntax(textWithInput, this.currentMode);
 
         return `
-          <div class="code-line" data-line="${line.lineNumber}" style="display: flex; align-items: baseline; min-height: 26px; padding: 3px 6px; font-family: var(--font-code); font-size: 12.5px; border-radius: 4px; transition: background 0.15s ease; box-sizing: border-box;">
-            <span class="line-cursor" style="display: inline-block; width: 12px; flex-shrink: 0; color: var(--warning); font-weight: bold; user-select: none;"></span>
-            <span class="line-num" style="display: inline-block; width: 24px; flex-shrink: 0; text-align: right; margin-right: 10px; color: #71717a; font-size: 11.5px; user-select: none;">${line.lineNumber}</span>
-            <span class="line-code" style="flex: 1; white-space: pre; color: #f4f4f5; font-family: var(--font-code);">${highlighted}</span>
-            <span class="line-skipped-tag" style="display: none; margin-left: auto; font-size: 10px; color: #a1a1aa; font-family: var(--font-ui); font-style: italic; padding-left: 8px;">[dilewati komputer]</span>
+          <div class="code-line" data-line="${line.lineNumber}" style="display: flex; align-items: baseline; min-height: 24px; padding: 2px 4px; font-family: var(--font-code); font-size: 11.5px; line-height: 1.5; border-radius: 4px; transition: background 0.15s ease; box-sizing: border-box;">
+            <span class="line-cursor" style="display: inline-block; width: 8px; flex-shrink: 0; color: var(--warning); font-weight: bold; user-select: none;"></span>
+            <span class="line-num" style="display: inline-block; width: 18px; flex-shrink: 0; text-align: right; margin-right: 6px; color: #71717a; font-size: 11px; user-select: none;">${line.lineNumber}</span>
+            <span class="line-code" style="flex: 1; min-width: 0; white-space: pre; color: #f4f4f5; font-family: var(--font-code); font-size: 11.5px;">${highlighted}</span>
+            <span class="line-skipped-tag" style="display: none; margin-left: auto; font-size: 9.5px; color: #a1a1aa; font-family: var(--font-ui); font-style: italic; padding-left: 6px;">[dilewati komputer]</span>
           </div>
         `;
       })

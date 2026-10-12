@@ -2,6 +2,7 @@
 import { get, set, del } from 'idb-keyval';
 import { StudentSession, ModuleProgress, ProgressionState, FormativeScores } from '../types/session.types';
 import { sanitizeWebUrl } from '../utils/security';
+import { MODULE_BRANCHES } from '../logic/modules.data';
 
 const STORAGE_KEYS = {
   SESSION: 'iobranch_session',
@@ -197,8 +198,9 @@ export class StorageService {
     const prevProgress = progressMap[moduleId];
     const prevBranches = prevProgress ? prevProgress.testedBranches : [];
     const mergedBranches = Array.from(new Set([...prevBranches, ...branches]));
-    const stars = mergedBranches.length >= 2 ? 2 : (mergedBranches.length >= 1 ? 1 : 0);
-    const isCompleted = mergedBranches.length >= 1;
+    const totalBranches = MODULE_BRANCHES[moduleId]?.length || 2;
+    const isCompleted = mergedBranches.length >= totalBranches;
+    const stars = isCompleted ? 2 : (mergedBranches.length >= 1 ? 1 : 0);
 
     // Gabungkan exploredBranches (terpisah dari testedBranches, tidak memberi nilai)
     const prevExplored = prevProgress?.exploredBranches || [];
@@ -218,8 +220,16 @@ export class StorageService {
     progressMap[moduleId] = updatedModule;
     await safeSet(STORAGE_KEYS.PROGRESS, progressMap);
 
-    // Tandai langkah tracing selesai jika sudah menguji cabang (benar ATAU sekedar dijelajahi)
-    if (mergedBranches.length >= 1 || mergedExplored.length >= 1) {
+    // Tandai langkah tracing tuntas jika dan hanya jika SELURUH modul pada siklus aktif telah tuntas 100% cabangnya
+    const currentCycle = await this.getCycleState();
+    const requiredModuleIds = currentCycle === 2 ? ['m04', 'm05'] : ['m01', 'm02', 'm03'];
+    const isCycleAllDone = requiredModuleIds.every((id) => {
+      const p = progressMap[id];
+      const tot = MODULE_BRANCHES[id]?.length || 2;
+      return (p?.testedBranches?.length || 0) >= tot;
+    });
+
+    if (isCycleAllDone) {
       await this.saveProgressionState({ stepTracingCompleted: true });
     }
 
@@ -260,7 +270,7 @@ export class StorageService {
    */
   public static async getCycleState(): Promise<number> {
     const cycle = await safeGet<number>(STORAGE_KEYS.CYCLE, 1);
-    const validated = cycle === 2 ? 2 : 1;
+    const validated = (this.activeCycleMemoryCache === 2 || cycle === 2) ? 2 : 1;
     this.activeCycleMemoryCache = validated;
     return validated;
   }
@@ -460,7 +470,21 @@ export class StorageService {
    * Mengambil daftar ID materi yang telah dipelajari/dibaca murid
    */
   public static async getReadMateriIds(): Promise<string[]> {
-    return (await safeGet<string[]>(STORAGE_KEYS.READ_MATERI, [])) || [];
+    const saved = (await safeGet<string[]>(STORAGE_KEYS.READ_MATERI, [])) || [];
+    const cycle = await this.getCycleState();
+    if (cycle === 2) {
+      // Pada Siklus 2, seluruh materi prasyarat & Siklus 1 otomatis ditandai tuntas
+      const cycle1MateriIds = [
+        'pra-01', 'pra-02', 'pra-03', 'pra-04', 'pra-05',
+        'ptk-01', 'ptk-02', 'ptk-03'
+      ];
+      const merged = Array.from(new Set([...saved, ...cycle1MateriIds]));
+      if (merged.length !== saved.length) {
+        await safeSet(STORAGE_KEYS.READ_MATERI, merged);
+      }
+      return merged;
+    }
+    return saved;
   }
 
   /**
@@ -489,20 +513,17 @@ export class StorageService {
     const saved = this.formativeMemoryCache[cycle] ?? (await safeGet<FormativeScores>(storageKey));
 
     // 1. Nilai Telusur (0–100): Sistem Pembobotan Kasus Kontekstual Sesuai Siklus Aktif
-    const isMod1Done = (allProgress['m01']?.testedBranches?.length || 0) >= 1 || !!allProgress['m01']?.isCompleted;
-    const isMod2Done = (allProgress['m02']?.testedBranches?.length || 0) >= 1 || !!allProgress['m02']?.isCompleted;
-    const isMod3Done = (allProgress['m03']?.testedBranches?.length || 0) >= 1 || !!allProgress['m03']?.isCompleted;
-    const isMod4Done = (allProgress['m04']?.testedBranches?.length || 0) >= 1 || !!allProgress['m04']?.isCompleted;
-    const isMod5Done = (allProgress['m05']?.testedBranches?.length || 0) >= 1 || !!allProgress['m05']?.isCompleted;
+    const isMod1Done = (allProgress['m01']?.testedBranches?.length || 0) >= (MODULE_BRANCHES['m01']?.length || 2);
+    const isMod2Done = (allProgress['m02']?.testedBranches?.length || 0) >= (MODULE_BRANCHES['m02']?.length || 2);
+    const isMod3Done = (allProgress['m03']?.testedBranches?.length || 0) >= (MODULE_BRANCHES['m03']?.length || 2);
+    const isMod4Done = (allProgress['m04']?.testedBranches?.length || 0) >= (MODULE_BRANCHES['m04']?.length || 3);
+    const isMod5Done = (allProgress['m05']?.testedBranches?.length || 0) >= (MODULE_BRANCHES['m05']?.length || 4);
 
     let tracingScore = 0;
     if (isCycle2) {
-      // Siklus 2: 5 Kasus (Kasus 1: 15, Kasus 2: 15, Kasus 3: 20, Kasus 4: 25, Kasus 5: 25) -> Total 100
-      if (isMod1Done) tracingScore += 15;
-      if (isMod2Done) tracingScore += 15;
-      if (isMod3Done) tracingScore += 20;
-      if (isMod4Done) tracingScore += 25;
-      if (isMod5Done) tracingScore += 25;
+      // Siklus 2: Murni 2 Kasus Baru (Kasus 4: 50 poin, Kasus 5: 50 poin) -> Total 100
+      if (isMod4Done) tracingScore += 50;
+      if (isMod5Done) tracingScore += 50;
     } else {
       // Siklus 1: 3 Kasus Wajib (Kasus 1: 30, Kasus 2: 30, Kasus 3: 40) -> Total 100
       if (isMod1Done) tracingScore += 30;
@@ -715,33 +736,31 @@ export class StorageService {
     const branchesMod4 = (mod4?.testedBranches || []).join(', ') || 'Belum Diuji';
     const branchesMod5 = (mod5?.testedBranches || []).join(', ') || 'Belum Diuji';
 
-    const isMod1Done = (mod1?.testedBranches || []).length >= 1 || !!mod1?.isCompleted;
-    const isMod2Done = (mod2?.testedBranches || []).length >= 1 || !!mod2?.isCompleted;
-    const isMod3Done = (mod3?.testedBranches || []).length >= 1 || !!mod3?.isCompleted;
-    const isMod4Done = (mod4?.testedBranches || []).length >= 1 || !!mod4?.isCompleted;
-    const isMod5Done = (mod5?.testedBranches || []).length >= 1 || !!mod5?.isCompleted;
+    const isMod1Done = (mod1?.testedBranches || []).length >= (MODULE_BRANCHES['m01']?.length || 2);
+    const isMod2Done = (mod2?.testedBranches || []).length >= (MODULE_BRANCHES['m02']?.length || 2);
+    const isMod3Done = (mod3?.testedBranches || []).length >= (MODULE_BRANCHES['m03']?.length || 2);
+    const isMod4Done = (mod4?.testedBranches || []).length >= (MODULE_BRANCHES['m04']?.length || 3);
+    const isMod5Done = (mod5?.testedBranches || []).length >= (MODULE_BRANCHES['m05']?.length || 4);
 
     const formatRow = (label: string, value: string | number): string => {
       return `|  ${label.padEnd(42, ' ')} : ${String(value)}`;
     };
 
-    const moduleRows: string[] = [
-      formatRow(`Modul 1: Percabangan IF (Bobot ${cycle === 2 ? '15' : '30'} Poin)`, isMod1Done ? 'TUNTAS' : 'BELUM SELESAI'),
-      formatRow('         Jalur Cabang Teruji', branchesMod1),
-      formatRow(`Modul 2: Percabangan IF-ELSE (Bobot ${cycle === 2 ? '15' : '30'} Poin)`, isMod2Done ? 'TUNTAS' : 'BELUM SELESAI'),
-      formatRow('         Jalur Cabang Teruji', branchesMod2),
-      formatRow(`Modul 3: Kasus Kontekstual (Bobot ${cycle === 2 ? '20' : '40'} Poin)`, isMod3Done ? 'TUNTAS' : 'BELUM SELESAI'),
-      formatRow('         Jalur Cabang Teruji', branchesMod3)
-    ];
-
-    if (cycle === 2) {
-      moduleRows.push(
-        formatRow('Modul 4: Percabangan Bertingkat (Bobot 25 Poin)', isMod4Done ? 'TUNTAS' : 'BELUM SELESAI'),
-        formatRow('         Jalur Cabang Teruji', branchesMod4),
-        formatRow('Modul 5: Switch-Case Multi-Kategori (Bobot 25 Poin)', isMod5Done ? 'TUNTAS' : 'BELUM SELESAI'),
-        formatRow('         Jalur Cabang Teruji', branchesMod5)
-      );
-    }
+    const moduleRows: string[] = cycle === 2
+      ? [
+          formatRow('Kasus 4: Percabangan Bertingkat (Bobot 50 Poin)', isMod4Done ? 'TUNTAS' : 'BELUM SELESAI'),
+          formatRow('         Jalur Cabang Teruji', branchesMod4),
+          formatRow('Kasus 5: Switch-Case Multi-Kategori (Bobot 50 Poin)', isMod5Done ? 'TUNTAS' : 'BELUM SELESAI'),
+          formatRow('         Jalur Cabang Teruji', branchesMod5)
+        ]
+      : [
+          formatRow('Kasus 1: Percabangan IF (Bobot 30 Poin)', isMod1Done ? 'TUNTAS' : 'BELUM SELESAI'),
+          formatRow('         Jalur Cabang Teruji', branchesMod1),
+          formatRow('Kasus 2: Percabangan IF-ELSE (Bobot 30 Poin)', isMod2Done ? 'TUNTAS' : 'BELUM SELESAI'),
+          formatRow('         Jalur Cabang Teruji', branchesMod2),
+          formatRow('Kasus 3: Kasus Kontekstual (Bobot 40 Poin)', isMod3Done ? 'TUNTAS' : 'BELUM SELESAI'),
+          formatRow('         Jalur Cabang Teruji', branchesMod3)
+        ];
 
     const tracingStars = StorageService.getTracingStars(formative.tracingScore, cycle === 2);
 
@@ -749,7 +768,7 @@ export class StorageService {
       ? [
           formatRow('Identitas Murid', `${session?.studentName || 'Murid'} (No. ${session?.studentAbsen || '-'})`),
           formatRow('Simbol Avatar Murid', (session?.teamSymbol || 'algoritma').toUpperCase()),
-          formatRow('Mode Pembelajaran', 'Mandiri (1 Murid • 1 Gawai)')
+          formatRow('Mode Pembelajaran', 'Mandiri (1 Murid • 1 Perangkat)')
         ]
       : [
           formatRow('Identitas Murid (Arsip)', session?.pairId || 'Penyelidik Logika'),

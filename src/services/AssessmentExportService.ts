@@ -22,6 +22,13 @@ export interface DirectUploadResult {
   timestamp?: string;
 }
 
+export type UploadProgressStatus = 'saving_local' | 'uploading' | 'retrying' | 'success' | 'error';
+
+export type UploadProgressCallback = (
+  status: UploadProgressStatus,
+  details?: { attempt?: number; maxAttempts?: number; message?: string }
+) => void;
+
 export class AssessmentExportService {
 
   /**
@@ -100,30 +107,34 @@ export class AssessmentExportService {
 
   /**
    * Mengirim data laporan formatif langsung ke Google Drive guru via Web API Google Apps Script (1-Klik Direct Cloud Upload).
-   * Secara otomatis melakukan pencadangan unduhan .txt lokal di gawai murid guna menjamin nol risiko kehilangan data.
+   * Secara otomatis melakukan pencadangan unduhan .txt lokal di perangkat murid guna menjamin nol risiko kehilangan data.
    */
   public static async uploadDirectToDrive(
     customEndpointUrl?: string,
-    customFolderId?: string
+    customFolderId?: string,
+    onProgress?: UploadProgressCallback
   ): Promise<DirectUploadResult> {
     const cycle = await StorageService.getCycleState();
     const session = await StorageService.getSession();
     const formative = await StorageService.getFormativeScores(cycle);
     const { filename, content } = await this.generateTextData();
 
-    // 1. Selalu unduh cadangan lokal di gawai murid (Nol Risiko Kehilangan Data)
+    // 1. Selalu unduh cadangan lokal di awal baris sebelum transmisi jaringan dimulai (Nol Risiko Kehilangan Data)
+    onProgress?.('saving_local', { message: 'Menyimpan salinan berkas cadangan ke folder lokal perangkat murid...' });
     this.triggerLocalDownload(filename, content);
 
     // 2. Ambil URL Web App Google Apps Script
     const endpoint = (customEndpointUrl || (await StorageService.getGasApiUrl())).trim();
 
     if (!endpoint) {
+      const errorMsg = 'Endpoint Google Apps Script belum diatur guru. Berkas laporan .txt telah diunduh ke perangkat murid.';
+      onProgress?.('error', { message: errorMsg });
       return {
         filename,
         content,
         methodUsed: 'download-fallback',
         success: false,
-        message: 'Endpoint Google Apps Script belum diatur guru. Berkas laporan .txt telah diunduh ke gawai murid.'
+        message: errorMsg
       };
     }
 
@@ -164,60 +175,82 @@ export class AssessmentExportService {
       }
     };
 
-    // 4. Eksekusi pengiriman HTTP POST ke Google Apps Script Web App
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 detik batas waktu pengiriman
+    // 4. Eksekusi pengiriman HTTP POST dengan retry logic maksimal 3 kali dan exponential backoff
+    const maxAttempts = 3;
+    const backoffDelays = [1500, 3000]; // 1.5 detik setelah percobaan 1, 3 detik setelah percobaan 2
+    let lastErrorMessage = '';
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8'
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      onProgress?.('uploading', {
+        attempt,
+        maxAttempts,
+        message: `Mengirim laporan ke Google Drive Guru (Percobaan ${attempt}/${maxAttempts})...`
       });
 
-      clearTimeout(timeoutId);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 detik batas waktu pengiriman
 
-      const jsonRes = await response.json();
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
 
-      if (jsonRes && jsonRes.status === 'success') {
-        return {
-          filename,
-          content,
-          methodUsed: 'direct-cloud',
-          success: true,
-          message: jsonRes.message || 'Laporan berhasil disimpan ke Google Drive Guru!',
-          fileUrl: jsonRes.fileUrl,
-          fileId: jsonRes.fileId,
-          folderName: jsonRes.folderName,
-          isUpdated: jsonRes.isUpdated,
-          timestamp: jsonRes.timestamp
-        };
-      } else {
-        return {
-          filename,
-          content,
-          methodUsed: 'direct-cloud',
-          success: false,
-          message: (jsonRes && jsonRes.message) || 'Gagal menyimpan berkas ke Google Drive Guru.'
-        };
+        clearTimeout(timeoutId);
+
+        const jsonRes = await response.json();
+
+        if (jsonRes && jsonRes.status === 'success') {
+          const successMsg = jsonRes.message || 'Laporan berhasil disimpan ke Google Drive Guru!';
+          onProgress?.('success', { attempt, maxAttempts, message: successMsg });
+          return {
+            filename,
+            content,
+            methodUsed: 'direct-cloud',
+            success: true,
+            message: successMsg,
+            fileUrl: jsonRes.fileUrl,
+            fileId: jsonRes.fileId,
+            folderName: jsonRes.folderName,
+            isUpdated: jsonRes.isUpdated,
+            timestamp: jsonRes.timestamp
+          };
+        } else {
+          lastErrorMessage = (jsonRes && jsonRes.message) || 'Gagal menyimpan berkas ke Google Drive Guru.';
+        }
+      } catch (err: unknown) {
+        clearTimeout(timeoutId);
+        const isAbort = err instanceof DOMException && err.name === 'AbortError';
+        lastErrorMessage = isAbort
+          ? 'Waktu pengiriman habis (batas waktu 15 detik terlampaui).'
+          : 'Tidak dapat terhubung ke Google Drive Guru.';
       }
-    } catch (err: unknown) {
-      clearTimeout(timeoutId);
-      const isAbort = err instanceof DOMException && err.name === 'AbortError';
-      const errMsg = isAbort
-        ? 'Waktu pengiriman habis (koneksi lambat). Berkas cadangan .txt telah tersimpan di gawai.'
-        : 'Tidak dapat terhubung ke Google Drive Guru. Berkas cadangan .txt telah tersimpan di gawai.';
 
-      return {
-        filename,
-        content,
-        methodUsed: 'download-fallback',
-        success: false,
-        message: errMsg
-      };
+      // Jika belum mencapai batas maksimum percobaan, jalankan jeda exponential backoff
+      if (attempt < maxAttempts) {
+        const delay = backoffDelays[attempt - 1] ?? 3000;
+        onProgress?.('retrying', {
+          attempt,
+          maxAttempts,
+          message: `${lastErrorMessage} Mencoba ulang otomatis (${attempt + 1}/${maxAttempts}) dalam ${delay / 1000} detik...`
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
     }
+
+    const finalErrMsg = `${lastErrorMessage} Berkas cadangan .txt telah aman tersimpan di perangkat murid.`;
+    onProgress?.('error', { message: finalErrMsg });
+
+    return {
+      filename,
+      content,
+      methodUsed: 'download-fallback',
+      success: false,
+      message: finalErrMsg
+    };
   }
 }

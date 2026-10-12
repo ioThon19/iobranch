@@ -3,36 +3,11 @@ import { ModuleProgress } from '../types/session.types';
 import { StorageService } from '../services/StorageService';
 import { renderPixelIcon } from './UIManager';
 
-export interface ModuleBranchDefinition {
-  id: string;
-  label: string;
-}
+import { ModuleBranchDefinition, MODULE_BRANCHES } from '../logic/modules.data';
 
-export const MODULE_BRANCHES: Record<string, ModuleBranchDefinition[]> = {
-  m01: [
-    { id: 'IF', label: 'Cabang IF (>= 4000)' },
-    { id: 'ELSE', label: 'Cabang ELSE (< 4000)' }
-  ],
-  m02: [
-    { id: 'IF', label: 'Cabang IF (> 30°C / Bahaya)' },
-    { id: 'NORMAL', label: 'Jalur Normal (<= 30°C / Aman)' }
-  ],
-  m03: [
-    { id: 'IF', label: 'Cabang IF (>= 25.000 / Diskon)' },
-    { id: 'ELSE', label: 'Cabang ELSE (< 25.000 / Normal)' }
-  ],
-  m04: [
-    { id: 'IF', label: 'Cabang 1: Cepat (>= 50)' },
-    { id: 'ELSE_IF', label: 'Cabang 2: Sedang (>= 20)' },
-    { id: 'ELSE', label: 'Cabang 3: Lambat (< 20)' }
-  ],
-  m05: [
-    { id: 'CASE_1', label: 'Kasus 1: Kopi' },
-    { id: 'CASE_2', label: 'Kasus 2: Teh' },
-    { id: 'CASE_3', label: 'Kasus 3: Susu' },
-    { id: 'DEFAULT', label: 'Standar: Lainnya' }
-  ]
-};
+export type { ModuleBranchDefinition };
+export { MODULE_BRANCHES };
+
 
 export class CoverageView {
   private container: HTMLElement;
@@ -117,15 +92,15 @@ export class CoverageView {
     if (this.isCycle2) {
       if (tracingStars >= 2) {
         targetGuideHtml = `<div style="font-size: 11px; color: var(--success); font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-          ${renderPixelIcon('check', 12, 'var(--success)')} Luar biasa! Seluruh 5 kasus Siklus 2 telah berhasil diselesaikan (100/100, Bintang 2 Tuntas Penuh).
+          ${renderPixelIcon('check', 12, 'var(--success)')} Luar biasa! Kedua kasus Siklus 2 telah berhasil diselesaikan (100/100, Bintang 2 Tuntas Penuh).
         </div>`;
       } else if (tracingStars >= 1) {
         targetGuideHtml = `<div style="font-size: 11px; color: var(--primary); margin-bottom: 8px; line-height: 1.4;">
-          Capaian: Bintang 1 Diraih! Tuntaskan Modul 4 &amp; 5 untuk meraih Bintang 2 (Nilai 100/100).
+          Capaian: Bintang 1 Diraih (50 Poin)! Tuntaskan kasus berikutnya untuk meraih Bintang 2 (Nilai 100/100).
         </div>`;
       } else {
         targetGuideHtml = `<div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4;">
-          Target: Tuntaskan minimal 3 kasus untuk meraih Bintang 1, dan seluruh 5 kasus untuk Bintang 2 (100/100).
+          Target: Tuntaskan Kasus 4 (50 Poin) untuk Bintang 1, dan kedua kasus (Kasus 4 &amp; 5) untuk Bintang 2 (100/100).
         </div>`;
       }
     } else {
