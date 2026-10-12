@@ -449,9 +449,9 @@ SELESAI JIKA`,
       {
         heading: 'Mengapa Percabangan Sangat Penting?',
         content: 'Dunia nyata penuh dengan situasi kondisional:<br />' +
-          '• Jika baterai HP di bawah 20%: Aktifkan mode hemat daya.<br />' +
+          '• Jika baterai perangkat di bawah 20%: Aktifkan mode hemat daya.<br />' +
           '• Jika umur penonton minimal 17 tahun: Izinkan akses konten.<br />' +
-          'Tanpa percabangan, teknologi pintar seperti smartphone, sensor pintu otomatis, dan lampu lalu lintas tidak akan bisa berfungsi.'
+          'Tanpa percabangan, teknologi pintar seperti perangkat digital, sensor pintu otomatis, dan lampu lalu lintas tidak akan bisa berfungsi.'
       },
       {
         heading: 'Prinsip Pasti Evaluasi Boolean',
@@ -612,127 +612,158 @@ SELESAI JIKA`,
     cycleRequired: 2, // Gated dengan Token Siklus 2
     order: 4,
     categoryLabel: 'Materi Percabangan',
-    title: 'Percabangan Bertingkat & Bersarang (Siklus 2)',
-    subtitle: 'Menangani Banyak Kemungkinan dengan Multi-Kondisi & Nested IF',
+    title: 'Percabangan Bertingkat else-if & Operator Logika',
+    subtitle: 'Alur Evaluasi Air Terjun dan Pengecekan Syarat Majemuk',
     badgeLabel: 'MODUL 4',
-    summary: 'Pada masalah yang lebih kompleks di Siklus 2, keputusan tidak hanya memiliki 2 cabang, melainkan banyak kriteria bertingkat (IF - ELSE IF - ELSE) atau pengecekan bersyarat di dalam syarat lainnya (Nested IF).',
-    analogies: 'Seperti penentuan harga tiket bioskop: JIKA hari Senin-Kamis tarif Rp35.000, LAINNYA JIKA hari Jumat tarif Rp40.000, LAINNYA (Sabtu-Minggu) tarif Rp50.000.',
+    summary: 'Percabangan bertingkat (if, else if, else) menangani banyak rentang kondisi secara bertahap dari atas ke bawah dengan bantuan operator logika majemuk && (DAN) serta || (ATAU).',
+    analogies: 'Seperti seleksi bertingkat: pelamar diperiksa kualifikasi utamanya dulu, jika belum memenuhi akan dicek syarat berikutnya, hingga opsi cadangan terakhir.',
     sections: [
       {
-        heading: 'Percabangan Banyak Pilihan (IF - ELSE IF - ELSE)',
-        content: 'Digunakan saat ada lebih dari dua kategori hasil. Komputer menguji syarat satu per satu dari paling atas. Begitu ada satu syarat yang bernilai TRUE, cabang tersebut dijalankan dan seluruh cabang di bawahnya langsung diabaikan.',
+        heading: '1. Alur Evaluasi dari Atas ke Bawah',
+        content: 'Komputer menguji ekspresi kondisi satu demi satu mulai dari baris paling atas:<br />' +
+          '• Begitu satu kondisi bernilai TRUE, blok kodenya langsung dieksekusi dan seluruh cabang di bawahnya dilewati.<br />' +
+          '• Jika bernilai FALSE, komputer turun memeriksa kondisi else-if berikutnya.<br />' +
+          '• Blok else penutup bertindak sebagai eksekusi terakhir bila semua syarat di atasnya bernilai FALSE.',
         codeSnippet: {
-          language: 'Klasifikasi Grade Nilai Rapor Murid (2 Versi)',
-          code: `// Multi-kondisi bertingkat`,
-          codePseudo: `JIKA (nilai >= 90) MAKA
-    grade <- "A (Sangat Baik)"
-LAINNYA JIKA (nilai >= 75) MAKA
-    grade <- "B (Baik)"
-LAINNYA JIKA (nilai >= 60) MAKA
-    grade <- "C (Cukup)"
+          language: 'Aturan Kuota Bandwidth Router (2 Versi)',
+          code: `// Alur evaluasi else-if bertingkat`,
+          codePseudo: `JIKA (prioritas == 1 DAN kuota >= 100) MAKA
+    alokasi <- "Jalur Utama: Kuota 100 Mbps"
+LAINNYA JIKA (kuota >= 50) MAKA
+    alokasi <- "Jalur Standar: Kuota 50 Mbps"
 LAINNYA
-    grade <- "D (Perlu Bimbingan)"
+    alokasi <- "Jalur Hemat: Kuota 10 Mbps"
 SELESAI JIKA`,
-          codeC: `if (nilai >= 90) {
-    printf("Grade: A (Sangat Baik)\\n");
-} else if (nilai >= 75) {
-    printf("Grade: B (Baik)\\n");
-} else if (nilai >= 60) {
-    printf("Grade: C (Cukup)\\n");
+          codeC: `if (prioritas == 1 && kuota >= 100) {
+    printf("Jalur Utama: Kuota 100 Mbps\\n");
+} else if (kuota >= 50) {
+    printf("Jalur Standar: Kuota 50 Mbps\\n");
 } else {
-    printf("Grade: D (Perlu Bimbingan)\\n");
+    printf("Jalur Hemat: Kuota 10 Mbps\\n");
 }`,
-          description: 'Dalam Bahasa C, penghubung antar-kondisi memakai sintaks "else if (...)". Komputer mengecek urutan dari atas ke bawah.'
+          description: 'Komputer mengecek kondisi prioritas dan kuota dari atas. Begitu syarat pertama terpenuhi, cabang berikutnya otomatis dilewati.'
         }
       },
       {
-        heading: 'Percabangan Bersarang (Nested IF)',
-        content: 'Nested IF adalah struktur percabangan di mana sebuah blok IF berada di dalam blok IF lainnya. Contoh: Sistem mengecek terlebih dahulu apakah kartu murid aktif. JIKA aktif, sistem di dalamnya mengecek lagi apakah saldo mencukupi.',
-        codeSnippet: {
-          language: 'Struktur Percabangan Bersarang (2 Versi)',
-          code: `// Pengecekan status kartu & saldo`,
-          codePseudo: `JIKA (kartuAktif == TRUE) MAKA
-    JIKA (saldo >= 4000) MAKA
-        TAMPILKAN("Akses Diterima: Silakan Masuk")
-    LAINNYA
-        TAMPILKAN("Akses Ditolak: Saldo Kurang")
-    SELESAI JIKA
-LAINNYA
-    TAMPILKAN("Akses Ditolak: Kartu Rusak/Nonaktif")
-SELESAI JIKA`,
-          codeC: `if (kartuAktif == 1) {
-    if (saldo >= 4000) {
-        printf("Akses Diterima: Silakan Masuk\\n");
-    } else {
-        printf("Akses Ditolak: Saldo Kurang\\n");
-    }
-} else {
-    printf("Akses Ditolak: Kartu Rusak/Nonaktif\\n");
-}`,
-          description: 'Nested IF memungkinkan verifikasi bertahap yang ketat: syarat luar harus lolos terlebih dahulu sebelum syarat di dalamnya diuji.'
+        heading: '2. Prinsip Air Terjun (Waterfall Execution)',
+        content: 'Dalam percabangan bertingkat, penulisan syarat wajib mengikuti prinsip air terjun:<br />' +
+          '• Urutan syarat ketat (nilai batas tertinggi) wajib diletakkan di bagian paling awal.<br />' +
+          '• Syarat yang lebih longgar diletakkan di cabang berikutnya.<br />' +
+          '• Komputer berhenti pada syarat pertama yang terpenuhi tanpa menguji cabang di bawahnya.'
+      },
+      {
+        heading: '3. Tabel Kebenaran Operator Logika Majemuk && dan ||',
+        content: 'Operator logika menggabungkan dua atau lebih syarat kondisi dalam satu baris pengecekan:<br />' +
+          '• Operator && (DAN): Menghasilkan TRUE hanya jika kedua syarat sama-sama bernilai TRUE.<br />' +
+          '• Operator || (ATAU): Menghasilkan TRUE jika minimal salah satu syarat bernilai TRUE.',
+        tableData: {
+          headers: ['Syarat A', 'Syarat B', 'Hasil A && B (DAN)', 'Hasil A || B (ATAU)', 'Keterangan'],
+          rows: [
+            ['TRUE', 'TRUE', 'TRUE', 'TRUE', 'Kedua syarat terpenuhi'],
+            ['TRUE', 'FALSE', 'FALSE', 'TRUE', 'Hanya salah satu syarat yang terpenuhi'],
+            ['FALSE', 'TRUE', 'FALSE', 'TRUE', 'Hanya salah satu syarat yang terpenuhi'],
+            ['FALSE', 'FALSE', 'FALSE', 'FALSE', 'Kedua syarat tidak terpenuhi']
+          ]
         }
       }
     ],
     diagramType: 'flowchart_nested',
-    proTips: 'Urutan menulis ELSE IF sangat krusial! Selalu tulis kondisi dengan angka batas tertinggi lebih dulu jika menguji nilai kelulusan bertingkat.',
-    misconceptionWarning: 'Jika urutan penulisan "nilai >= 60" ditaruh di paling atas, maka murid yang nilainya 95 pun akan langsung dimasukkan ke Grade C dan tidak pernah sampai ke pemeriksaan Grade A!'
+    proTips: 'Selalu letakkan syarat yang paling ketat dengan angka batas tertinggi di urutan paling atas agar tidak terhalang oleh syarat yang lebih longgar.',
+    misconceptionWarning: 'Urutan rentang nilai yang terbalik memicu unreachable code (baris mati). Jika syarat "kuota >= 50" ditulis sebelum "kuota >= 100", maka kuota bernilai 120 akan langsung tersangkut di cabang 50 dan cabang 100 tidak akan pernah dieksekusi!',
+    interactiveCheck: {
+      question: 'Mengapa syarat dengan kriteria paling ketat wajib ditulis di baris paling atas pada struktur else-if?',
+      options: [
+        {
+          label: 'Agar data yang memenuhi syarat ketat tidak terlanjur tersaring oleh syarat yang lebih longgar (mencegah unreachable code).',
+          isCorrect: true,
+          explanation: 'Tepat sekali! Evaluasi air terjun berhenti begitu menemukan cabang bernilai TRUE pertama.'
+        },
+        {
+          label: 'Karena komputer hanya mampu membaca angka yang diurutkan dari kecil ke besar.',
+          isCorrect: false,
+          explanation: 'Salah. Komputer membaca urutan kode baris demi baris persis seperti yang ditulis pembuat program.'
+        }
+      ]
+    }
   },
 
   {
     id: 'ptk-05',
     category: 'PERCABANGAN',
-    cycleRequired: 2, // Gated dengan Token Siklus 2 (teknik Telusur untuk percabangan bertingkat)
+    cycleRequired: 2, // Gated dengan Token Siklus 2
     order: 5,
     categoryLabel: 'Materi Percabangan',
-    title: 'Analisis Alur & Teknik Telusur Bebas Bug (Siklus 2)',
-    subtitle: 'Strategi Menemukan Kesalahan Logika Tanpa Perlu Menebak',
+    title: 'Percabangan Multi-Kategori switch-case',
+    subtitle: 'Pemilihan Nilai Diskret dan Penanganan Kasus Default',
     badgeLabel: 'MODUL 5',
-    summary: 'Dalam petualangan logika pemrograman, kebiasaan buruk yang harus dihindari adalah menebak-nebak hasil akhir program secara spekulatif. Melalui teknik Telusur (penelusuran baris demi baris), kamu dilatih melacak nilai variabel secara ilmiah.',
-    analogies: 'Telusur seperti rekaman VAR (Video Assistant Referee) di pertandingan sepak bola: mengulang kejadian detik demi detik secara lambat untuk memastikan keputusan mana yang benar-benar terjadi.',
+    summary: 'Struktur switch-case dipakai untuk memilih satu jalur instruksi dari banyak kemungkinan berdasarkan pencocokan nilai diskret secara langsung dan rapi.',
+    analogies: 'Seperti tombol pada mesin penjual minuman otomatis: menekan tombol 1 mengeluarkan Air Mineral, tombol 2 Teh Melati, tombol 3 Kopi Susu, dan tombol selain itu memicu pesan Pilihan Tidak Valid.',
     sections: [
       {
-        heading: '3 Jenis Error yang Sering Dihadapi Programmer',
-        content: '1. <strong>Syntax Error</strong>: Kesalahan salah ketik aturan tata bahasa (misal kurang tanda kutip). Program gagal dijalankan kompilator.<br />' +
-          '2. <strong>Runtime Error</strong>: Program berhasil dijalankan tapi mendadak macet/crash di tengah jalan (misal membagi angka dengan nol).<br />' +
-          '3. <strong>Logic Error (Bug Logika)</strong>: Program berjalan mulus tanpa error, namun menghasilkan jawaban yang SALAH karena salah memilih operator pembanding!'
-      },
-      {
-        heading: 'Studi Kasus Bug Logika Operator: Contoh 2 Versi',
-        content: 'Perhatikan bug logika berikut ketika seorang programmer salah mengetik operator <code>&gt;</code> alih-alih <code>&gt;=</code> pada batas nilai 75:',
+        heading: '1. Pemilihan Nilai Diskret & Fungsi break;',
+        content: 'Struktur switch-case bekerja dengan mencocokkan nilai variabel secara langsung ke label case yang sesuai:<br />' +
+          '• Nilai diskret: Berupa angka bulat (integer) atau karakter huruf tunggal, bukan rentang perbandingan.<br />' +
+          '• Fungsi break;: Menghentikan eksekusi dan segera melompat keluar dari blok switch.<br />' +
+          '• Dampak tanpa break;: Memicu efek fall-through, yaitu instruksi pada case berikutnya ikut dijalankan meskipun labelnya tidak cocok!',
         codeSnippet: {
-          language: 'Contoh Bug Logika Boundary Value (2 Versi)',
-          code: `// Bug: nilai > 75 membuat murid bernilai 75 keliru remidi`,
-          codePseudo: `// KODE SALAH (Bug Logika):
-JIKA (nilaiUjian > 75) MAKA // SALAH! Seharusnya >= 75
-    TAMPILKAN("LULUS")
-LAINNYA
-    TAMPILKAN("REMIDI")
-SELESAI JIKA`,
-          codeC: `// KODE SALAH (Bug Logika):
-if (nilaiUjian > 75) { // SALAH! Seharusnya >= 75
-    printf("LULUS\\n");
-} else {
-    printf("REMIDI\\n"); // Murid dengan nilai 75 keliru masuk ke sini!
+          language: 'Logika Tombol Mesin Minuman (2 Versi)',
+          code: `// Pemilihan nilai diskret switch-case`,
+          codePseudo: `PILIH (tombol)
+    KASUS 1:
+        TAMPILKAN("Keluarkan Air Mineral")
+        BERHENTI
+    KASUS 2:
+        TAMPILKAN("Keluarkan Teh Melati")
+        BERHENTI
+    KASUS 3:
+        TAMPILKAN("Keluarkan Kopi Susu")
+        BERHENTI
+    STANDAR:
+        TAMPILKAN("Nomor Tombol Tidak Valid")
+SELESAI PILIH`,
+          codeC: `switch (tombol) {
+    case 1:
+        printf("Keluarkan Air Mineral\\n");
+        break;
+    case 2:
+        printf("Keluarkan Teh Melati\\n");
+        break;
+    case 3:
+        printf("Keluarkan Kopi Susu\\n");
+        break;
+    default:
+        printf("Nomor Tombol Tidak Valid\\n");
+        break;
 }`,
-          description: 'Dengan teknik penelusuran (tracing), murid dapat membuktikan bahwa saat nilaiUjian = 75, ekspresi (75 > 75) menghasilkan FALSE, sehingga program salah mengambil cabang!'
+          description: 'Setiap case diakhiri perintah break; agar mesin hanya memproses produk yang dipilih oleh murid.'
         }
       },
       {
-        heading: 'Tabel Penelusuran (Trace Table)',
-        content: 'Gunakan tabel penelusuran saat menguji tantangan kode di Langkah 3 (Lab Telusur Alur):',
-        tableData: {
-          headers: ['Langkah', 'Baris Kode yang Dijalankan', 'Nilai Variabel', 'Evaluasi Kondisi', 'Keterangan Jalur'],
-          rows: [
-            ['Baris 1', 'int saldo = 5000;', 'saldo = 5000', '-', 'Inisialisasi variabel'],
-            ['Baris 2', 'if (saldo >= 4000)', 'saldo = 5000', '5000 >= 4000 -> TRUE', 'Masuk ke Blok IF'],
-            ['Baris 3', 'printf("Pintu Terbuka")', 'saldo = 5000', '-', 'Mencetak output ke layar'],
-            ['Baris 4-5', 'else { ... }', 'saldo = 5000', '-', 'Dilewati / Skipped']
-          ]
-        }
+        heading: '2. Fungsi Cabang Standar (default) sebagai Penyelamat Error',
+        content: 'Cabang default bertugas menangani segala kondisi masukan yang tidak terduga:<br />' +
+          '• Bekerja mirip seperti blok else terakhir pada struktur if-else.<br />' +
+          '• Menjadi jaring pengaman bila murid menekan tombol yang tidak terdaftar (misal menekan angka 9 pada mesin 3 tombol).<br />' +
+          '• Menjaga sistem tetap stabil tanpa mengalami kebingungan instruksi atau macet.'
       }
     ],
-    proTips: 'Jika program menghasilkan keluaran yang salah, jangan langsung ubah kode secara acak! Buka Lab Telusur, amati baris kondisi yang sedang aktif, dan cek apakah evaluasinya bernilai True atau False.',
-    misconceptionWarning: 'Bug logika tidak bisa dideteksi otomatis oleh kompilator komputer. Hanya nalar logika murid yang dapat membuktikan kebenarannya!'
+    diagramType: 'flowchart_ifelse',
+    proTips: 'Selalu sertakan perintah break; pada setiap case dan blok default di bagian akhir untuk mengantisipasi masukan yang tidak valid.',
+    misconceptionWarning: 'switch-case tidak dapat digunakan untuk mengecek rentang logika perbandingan seperti (nilai >= 75). Struktur ini khusus dirancang untuk mencocokkan nilai diskret pasti (1, 2, 3, dan seterusnya).',
+    interactiveCheck: {
+      question: 'Apa fungsi utama dari perintah break; di dalam setiap blok case?',
+      options: [
+        {
+          label: 'Menghentikan eksekusi dan segera keluar dari struktur switch agar case berikutnya tidak ikut dijalankan.',
+          isCorrect: true,
+          explanation: 'Tepat sekali! Tanpa break;, program akan mengalami fall-through dan mengeksekusi case selanjutnya secara berurutan.'
+        },
+        {
+          label: 'Menghapus nilai variabel masukan agar memori perangkat menjadi bersih.',
+          isCorrect: false,
+          explanation: 'Salah. Perintah break; murni mengatur alur kendali eksekusi program, bukan menghapus data variabel.'
+        }
+      ]
+    }
   }
 ];
 

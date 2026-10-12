@@ -135,25 +135,94 @@ export class WorldScene extends Phaser.Scene {
     schoolZone.setInteractive({ useHandCursor: true });
     schoolZone.on('pointerdown', () => this.handlePinClick('MATERI'));
 
-    // Guru Pak Budi berdiri di luar sekolah: ujung kiri jalan utama antara pepohonan
-    const teacher = this.add.sprite(32, 134, 'npc_teacher').setDepth(9);
+    // -----------------------------------------------------------------------
+    // GURU PAK BUDI & PENANDA EMAS BERDENYUT (GOLDEN BEACON PULSE - TSK-07)
+    // -----------------------------------------------------------------------
+    // Guru Pak Budi berdiri di luar sekolah: ujung barat jalan utama (posisi x: 44 px aman dari tepi kanvas)
+    const teacher = this.add.sprite(44, 134, 'npc_teacher').setDepth(15);
     teacher.setInteractive({ useHandCursor: true });
     teacher.on('pointerdown', () => this.handlePinClick('DIALOG'));
 
-    // Label Penanda Nama Pak Budi (mengambang di atas kepala dengan jarak aman)
-    const teacherLabel = this.add.text(32, 119, 'Pak Budi', {
+    // A. Efek Cincin Suar Emas di Tanah (Ground Golden Beacon Pulse)
+    const beaconGround = this.add.ellipse(44, 142, 26, 12, 0xd97706, 0.55).setDepth(8);
+    this.tweens.add({
+      targets: beaconGround,
+      scaleX: { from: 0.7, to: 1.85 },
+      scaleY: { from: 0.7, to: 1.85 },
+      alpha: { from: 0.8, to: 0 },
+      duration: 1250,
+      repeat: -1,
+      ease: 'Cubic.easeOut'
+    });
+
+    // B. Efek Cincin Gelombang Emas di Atas Kepala (Overhead Pulse Ring)
+    const beaconRing = this.add.circle(44, 98, 11, 0xf59e0b, 0.65).setDepth(24);
+    this.tweens.add({
+      targets: beaconRing,
+      scale: { from: 0.5, to: 1.85 },
+      alpha: { from: 0.85, to: 0 },
+      duration: 1050,
+      repeat: -1,
+      ease: 'Sine.easeOut'
+    });
+
+    // C. Inti Suar Emas Berpendar (Overhead Glowing Beacon Core)
+    const beaconGlow = this.add.circle(44, 98, 5, 0xfbbf24, 0.95).setDepth(25);
+    const beaconCore = this.add.circle(44, 98, 2.5, 0xffffff, 1).setDepth(26);
+    this.tweens.add({
+      targets: [beaconGlow, beaconCore],
+      scale: { from: 0.85, to: 1.35 },
+      duration: 650,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    // D. Panah Emas Retro Penunjuk ke Arah Pak Budi
+    const beaconArrow = this.add.triangle(44, 106, 0, 0, 8, 0, 4, 6, 0xf59e0b).setDepth(25);
+    this.tweens.add({
+      targets: beaconArrow,
+      y: '+=2',
+      duration: 650,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    // E. Label Penanda Teks Mengambang yang Dipertegas: [ Temui Pak Budi ]
+    // Diset anchor kiri di x: 8 px agar terlindung 100% dari tepi kiri kanvas (Zero Crop)
+    const teacherLabel = this.add.text(8, 116, '[ Temui Pak Budi ]', {
       fontFamily: 'Inter, system-ui, sans-serif',
-      fontSize: '7px',
+      fontSize: '7.5px',
       fontStyle: 'bold',
       color: '#ffffff',
-      backgroundColor: 'rgba(15, 118, 110, 0.95)',
-      padding: { x: 4, y: 1.5 }
-    }).setOrigin(0.5, 1).setDepth(20);
+      backgroundColor: 'rgba(180, 83, 9, 0.96)',
+      padding: { x: 5, y: 2 }
+    }).setOrigin(0, 1).setDepth(27);
+    teacherLabel.setStroke('#78350f', 1.5);
     teacherLabel.setInteractive({ useHandCursor: true });
     teacherLabel.on('pointerdown', () => this.handlePinClick('DIALOG'));
 
+    // Interaksi Hover pada Label dan Karakter Pak Budi
+    const onTeacherHover = () => {
+      teacherLabel.setColor('#fef08a');
+      teacher.setScale(1.08);
+      beaconGlow.setScale(1.5);
+    };
+    const onTeacherOut = () => {
+      teacherLabel.setColor('#ffffff');
+      teacher.setScale(1.0);
+      beaconGlow.setScale(1.0);
+    };
+
+    teacher.on('pointerover', onTeacherHover);
+    teacher.on('pointerout', onTeacherOut);
+    teacherLabel.on('pointerover', onTeacherHover);
+    teacherLabel.on('pointerout', onTeacherOut);
+
+    // Animasi Melayang Lembut (Bobbing) Bersama Pak Budi
     this.tweens.add({
-      targets: [teacher, teacherLabel],
+      targets: [teacher, teacherLabel, beaconRing, beaconGlow, beaconCore, beaconArrow],
       y: '-=3',
       duration: 1100,
       yoyo: true,
@@ -421,9 +490,9 @@ export class WorldScene extends Phaser.Scene {
 
   private checkBuildingProximity(): void {
     const targets = [
-      { name: 'Guru Pak Budi', actionText: 'Bicara dengan Pak Budi', x: 32, y: 134, screen: 'DIALOG' },
+      { name: 'Guru Pak Budi', actionText: 'Bicara dengan Pak Budi', x: 44, y: 134, screen: 'DIALOG' },
       { name: 'Gedung Sekolah', actionText: 'Buka Ruang Kelas (Materi)', x: 92, y: 65, screen: 'MATERI' },
-      { name: 'Perpustakaan', actionText: 'Buka Ruang Evaluasi LKPD', x: 392, y: 70, screen: 'EVALUASI' },
+      { name: 'Perpustakaan', actionText: 'Buka Ruang Evaluasi Pemahaman', x: 392, y: 70, screen: 'EVALUASI' },
       { name: 'Arena Bug Logika', actionText: 'Masuk Arena Tantangan', x: 88, y: 195, screen: 'BATTLE' },
       { name: 'Lab Telusur Kode', actionText: 'Masuk Lab Telusur Kode', x: 392, y: 195, screen: 'TRACING' }
     ];
@@ -465,8 +534,6 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  // =========================================================================
-  // 5. Pendaftaran Listener Event Bus & Simulasi Deterministic Tracing
   // =========================================================================
   // 4. Pendaftaran Listener Event Bus
   // =========================================================================

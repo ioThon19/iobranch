@@ -247,11 +247,11 @@ export const CASE_MODULES: CaseModule[] = [
   },
   {
     id: 'm04',
-    title: 'Klasifikasi Kecepatan Paket Data',
+    title: 'Router Wi-Fi Laboratorium (Klasifikasi Kecepatan)',
     cycleRequired: 2,
     concept: 'Percabangan Bertingkat (ELSE - IF)',
-    weightPoints: 25,
-    storyPrompt: 'Saat pelaksanaan asesmen pembelajaran digital di Laboratorium Komputer Sekolah Kota Harmoni, beberapa murid mengeluhkan tampilan soal yang lambat dimuat, sementara murid di baris lain melaporkan koneksi berjalan lancar. Router cerdas laboratorium ternyata sedang mengalami kendala dalam mengklasifikasikan pembagian prioritas lebar pita (bandwidth) antrean data.\n\nRouter jaringan diprogram menggunakan rantai percabangan bertingkat ELSE - IF: Kualitas koneksi diklasifikasikan menjadi Koneksi Cepat HANYA JIKA kecepatan terdeteksi minimal 50 Mbps (kecepatan >= 50). JIKA TIDAK dan kecepatan minimal 20 Mbps (kecepatan >= 20), sistem menetapkannya sebagai Koneksi Sedang. Untuk kecepatan di bawah 20 Mbps, router otomatis mengeksekusi cabang terakhir sebagai Koneksi Lambat.\n\nTugas Penyelidikanmu:\nBuktikan mengapa kecepatan 35 Mbps dialokasikan ke jalur Koneksi Sedang, dan selidiki berapa ambang batas kecepatan minimal yang harus dipenuhi agar gawai murid memperoleh prioritas tertinggi Koneksi Cepat!',
+    weightPoints: 50,
+    storyPrompt: 'Saat pelaksanaan asesmen pembelajaran digital di Laboratorium Komputer Sekolah Kota Harmoni, beberapa murid mengeluhkan tampilan soal yang lambat dimuat, sementara murid di baris lain melaporkan koneksi berjalan lancar. Router cerdas laboratorium ternyata sedang mengalami kendala dalam mengklasifikasikan pembagian prioritas lebar pita (bandwidth) antrean data.\n\nRouter jaringan diprogram menggunakan rantai percabangan bertingkat ELSE - IF: Kualitas koneksi diklasifikasikan menjadi Koneksi Cepat HANYA JIKA kecepatan terdeteksi minimal 50 Mbps (kecepatan >= 50). JIKA TIDAK dan kecepatan minimal 20 Mbps (kecepatan >= 20), sistem menetapkannya sebagai Koneksi Sedang. Untuk kecepatan di bawah 20 Mbps, router otomatis mengeksekusi cabang terakhir sebagai Koneksi Lambat.\n\nTugas Penyelidikanmu:\nBuktikan mengapa kecepatan 35 Mbps dialokasikan ke jalur Koneksi Sedang, dan selidiki berapa ambang batas kecepatan minimal yang harus dipenuhi agar perangkat murid memperoleh prioritas tertinggi Koneksi Cepat!',
     inputVariable: 'kecepatan',
     inputLabel: 'Kecepatan Internet (Mbps)',
     defaultInput: 35,
@@ -267,21 +267,21 @@ export const CASE_MODULES: CaseModule[] = [
         value: 65,
         targetBranch: 'IF',
         badge: 'Jalur IF (Cepat)',
-        explanation: 'Kecepatan 65 >= 50 Mbps (Cabang 1: Koneksi Cepat)'
+        explanation: 'Kecepatan 65 >= 50 Mbps (Cabang IF: Koneksi Cepat)'
       },
       {
         label: 'Coba 35 Mbps',
         value: 35,
         targetBranch: 'ELSE_IF',
         badge: 'Jalur ELSE IF (Sedang)',
-        explanation: 'Kecepatan 35 >= 20 Mbps (Cabang 2: Koneksi Sedang)'
+        explanation: 'Kecepatan 35 >= 20 Mbps (Cabang ELSE IF: Koneksi Sedang)'
       },
       {
         label: 'Coba 12 Mbps',
         value: 12,
         targetBranch: 'ELSE',
         badge: 'Jalur ELSE (Lambat)',
-        explanation: 'Kecepatan 12 < 20 Mbps (Cabang 3: Koneksi Lambat)'
+        explanation: 'Kecepatan 12 < 20 Mbps (Cabang ELSE: Koneksi Lambat)'
       }
     ],
     lines: [
@@ -342,10 +342,10 @@ export const CASE_MODULES: CaseModule[] = [
   },
   {
     id: 'm05',
-    title: 'Pemilih Menu Minuman Otomatis',
+    title: 'Mesin Minuman Otomatis (Smart Vending Machine)',
     cycleRequired: 2,
     concept: 'Percabangan Multi-Kategori (SWITCH - CASE)',
-    weightPoints: 25,
+    weightPoints: 50,
     storyPrompt: 'Mesin penjual minuman pintar (Smart Vending Machine) baru saja diresmikan di selasar lobi Sekolah Kota Harmoni. Namun pada jam istirahat pertama, beberapa murid mengira mesin mengalami kerusakan sistem karena layar berkedip dan menolak mengeluarkan minuman saat mereka menekan tombol angka yang tidak ada di etalase.\n\nPengendali mesin diprogram menggunakan struktur multi-kategori SWITCH - CASE: Tombol angka 1 memilih Kopi Hangat, tombol angka 2 memilih Teh Manis, dan tombol angka 3 memilih Susu Segar. Setiap menu dipagari instruksi break; agar pilihan tidak tertimpa. JIKA murid menekan tombol angka selain 1, 2, atau 3 (misalnya tombol angka 9), sistem otomatis meluncur ke cabang pengaman STANDAR (default) untuk menampilkan peringatan menu tidak tersedia tanpa membuat sistem eror.\n\nTugas Penyelidikanmu:\nBuktikan menu apa yang tersaji saat murid menekan tombol 2, lalu selidiki bagaimana cabang STANDAR (default) menyelamatkan program dari kegagalan saat ada murid yang menekan tombol asing seperti nomor 9!',
     inputVariable: 'pilihan',
     inputLabel: 'Nomor Pilihan Minuman',
@@ -358,32 +358,32 @@ export const CASE_MODULES: CaseModule[] = [
     },
     testPresets: [
       {
-        label: 'Tombol 1: Kopi',
+        label: 'Menu 1: Kopi',
         value: 1,
         targetBranch: 'CASE_1',
-        badge: 'Kasus 1 (Kopi)',
-        explanation: 'Pilihan 1 mengeluarkan Kopi Hangat'
+        badge: 'Menu 1 (Kopi)',
+        explanation: 'Pilihan 1 mengeluarkan Menu Kopi Hangat'
       },
       {
-        label: 'Tombol 2: Teh',
+        label: 'Menu 2: Teh',
         value: 2,
         targetBranch: 'CASE_2',
-        badge: 'Kasus 2 (Teh)',
-        explanation: 'Pilihan 2 mengeluarkan Teh Manis'
+        badge: 'Menu 2 (Teh)',
+        explanation: 'Pilihan 2 mengeluarkan Menu Teh Manis'
       },
       {
-        label: 'Tombol 3: Susu',
+        label: 'Menu 3: Susu',
         value: 3,
         targetBranch: 'CASE_3',
-        badge: 'Kasus 3 (Susu)',
-        explanation: 'Pilihan 3 mengeluarkan Susu Segar'
+        badge: 'Menu 3 (Susu)',
+        explanation: 'Pilihan 3 mengeluarkan Menu Susu Segar'
       },
       {
-        label: 'Tombol 9: Menu Asing',
+        label: 'Menu 9: Standar / Batal',
         value: 9,
         targetBranch: 'DEFAULT',
         badge: 'Standar (Default)',
-        explanation: 'Pilihan 9 memicu blok Standar/Default (Menu Tidak Tersedia)'
+        explanation: 'Pilihan 9 memicu blok Standar/Default (Menu Tidak Tersedia / Batal)'
       }
     ],
     lines: [
@@ -437,3 +437,35 @@ export const CASE_MODULES: CaseModule[] = [
     }
   }
 ];
+
+export interface ModuleBranchDefinition {
+  id: string;
+  label: string;
+}
+
+export const MODULE_BRANCHES: Record<string, ModuleBranchDefinition[]> = {
+  m01: [
+    { id: 'IF', label: 'Cabang IF (>= 4000)' },
+    { id: 'ELSE', label: 'Cabang ELSE (< 4000)' }
+  ],
+  m02: [
+    { id: 'IF', label: 'Cabang IF (> 30°C / Bahaya)' },
+    { id: 'NORMAL', label: 'Jalur Normal (<= 30°C / Aman)' }
+  ],
+  m03: [
+    { id: 'IF', label: 'Cabang IF (>= 25.000 / Diskon)' },
+    { id: 'ELSE', label: 'Cabang ELSE (< 25.000 / Normal)' }
+  ],
+  m04: [
+    { id: 'IF', label: 'Cabang 1: Cepat (>= 50)' },
+    { id: 'ELSE_IF', label: 'Cabang 2: Sedang (>= 20)' },
+    { id: 'ELSE', label: 'Cabang 3: Lambat (< 20)' }
+  ],
+  m05: [
+    { id: 'CASE_1', label: 'Kasus 1: Kopi' },
+    { id: 'CASE_2', label: 'Kasus 2: Teh' },
+    { id: 'CASE_3', label: 'Kasus 3: Susu' },
+    { id: 'DEFAULT', label: 'Standar: Lainnya' }
+  ]
+};
+
