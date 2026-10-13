@@ -14,7 +14,8 @@ const STORAGE_KEYS = {
   FORMATIVE_SCORES: 'iobranch_formative_scores',
   FORMATIVE_SCORES_C2: 'iobranch_formative_scores_c2',
   GAS_API_URL: 'iobranch_gas_api_url',
-  POSTTEST_URL: 'iobranch_posttest_url'
+  POSTTEST_URL: 'iobranch_posttest_url',
+  POSTTEST_URL_C2: 'iobranch_posttest_url_c2'
 } as const;
 
 // In-memory fallback untuk ketahanan lingkungan tanpa IndexedDB (misal: private mode ketat atau test runner)
@@ -57,13 +58,22 @@ export const DEFAULT_DRIVE_URL = DRIVE_CYCLE_URLS[1]!;
 
 export const DEFAULT_GAS_API_URL = 'https://script.google.com/macros/s/AKfycbzJSkAgBJVY4UnTIQNLSjRM0raYJCzeijdSjlubkHS-2OuYn0CbuoQnmxjxhLVfrn3a/exec';
 
-export const DEFAULT_POSTTEST_URL = 'https://forms.gle/xj61VKHBTpqxEvWKA';
+export const POSTTEST_CYCLE_URLS: Record<number, string> = {
+  1: 'https://forms.gle/xj61VKHBTpqxEvWKA',
+  2: 'https://forms.gle/p2QhGwvjhnCh4PXk6'
+};
+
+export const DEFAULT_POSTTEST_URL = POSTTEST_CYCLE_URLS[1]!;
+export const DEFAULT_POSTTEST_C2_URL = POSTTEST_CYCLE_URLS[2]!;
 
 export class StorageService {
   private static activeCycleMemoryCache = 1;
   private static driveUrlMemoryCache: string = DEFAULT_DRIVE_URL;
   private static gasApiUrlMemoryCache: string = DEFAULT_GAS_API_URL;
-  private static posttestUrlMemoryCache: string = DEFAULT_POSTTEST_URL;
+  private static posttestUrlMemoryCache: Record<number, string> = {
+    1: POSTTEST_CYCLE_URLS[1]!,
+    2: POSTTEST_CYCLE_URLS[2]!
+  };
   private static progressionMemoryCache: ProgressionState | null = null;
   private static progressionWritePromise: Promise<ProgressionState> | null = null;
   private static formativeMemoryCache: Record<number, FormativeScores> = {};
@@ -419,26 +429,46 @@ export class StorageService {
   }
 
   /**
-   * Mengambil URL Google Form Posttest Pembelajaran secara sinkron dari memori lokal
+   * Memeriksa apakah suatu URL adalah URL Google Form bawaan resmi sistem untuk Siklus 1 atau Siklus 2
    */
-  public static getPosttestUrlSync(): string {
-    return this.posttestUrlMemoryCache || DEFAULT_POSTTEST_URL;
+  public static isDefaultPosttestUrl(url?: string | null, cycle: number = 1): boolean {
+    if (!url) return true;
+    const clean = url.trim();
+    const defaultForCycle = POSTTEST_CYCLE_URLS[cycle] || DEFAULT_POSTTEST_URL;
+    return clean === defaultForCycle;
+  }
+
+  /**
+   * Mengambil URL Google Form Posttest Pembelajaran secara sinkron dari memori lokal
+   * Mendukung pemilihan siklus (1 atau 2). Jika tidak ditentukan, mengacu pada siklus yang sedang aktif.
+   */
+  public static getPosttestUrlSync(overrideCycle?: number): string {
+    const cycle = overrideCycle ?? (this.activeCycleMemoryCache || 1);
+    const defaultUrl = POSTTEST_CYCLE_URLS[cycle] || DEFAULT_POSTTEST_URL;
+    return this.posttestUrlMemoryCache[cycle] || defaultUrl;
   }
 
   /**
    * Mengambil URL Google Form Posttest Pembelajaran
-   * Mendukung injeksi dinamis via query param ?form=... atau ?posttest=...
+   * Mendukung pemilihan siklus (1 atau 2) serta injeksi dinamis via query param ?form=... / ?form1=... / ?form2=...
    */
-  public static async getPosttestUrl(): Promise<string> {
+  public static async getPosttestUrl(overrideCycle?: number): Promise<string> {
+    const activeCycle = await this.getCycleState();
+    const cycle = overrideCycle ?? activeCycle;
+    const defaultUrl = POSTTEST_CYCLE_URLS[cycle] || DEFAULT_POSTTEST_URL;
+    const storageKey = cycle === 2 ? STORAGE_KEYS.POSTTEST_URL_C2 : STORAGE_KEYS.POSTTEST_URL;
+
     if (typeof window !== 'undefined' && window.location?.search) {
       try {
         const params = new URLSearchParams(window.location.search);
-        const queryPosttest = params.get('form') || params.get('posttest');
-        if (queryPosttest) {
-          const sanitized = sanitizeWebUrl(queryPosttest);
+        const querySpecific = params.get(`form${cycle}`) || params.get(`posttest${cycle}`);
+        const queryGeneral = cycle === activeCycle ? (params.get('form') || params.get('posttest')) : null;
+        const candidate = querySpecific || queryGeneral;
+        if (candidate) {
+          const sanitized = sanitizeWebUrl(candidate);
           if (sanitized && (sanitized.includes('forms.gle') || sanitized.includes('docs.google.com') || sanitized.startsWith('http'))) {
-            this.posttestUrlMemoryCache = sanitized;
-            await safeSet(STORAGE_KEYS.POSTTEST_URL, sanitized);
+            this.posttestUrlMemoryCache[cycle] = sanitized;
+            await safeSet(storageKey, sanitized);
             return sanitized;
           }
         }
@@ -447,23 +477,26 @@ export class StorageService {
       }
     }
 
-    if (this.posttestUrlMemoryCache && this.posttestUrlMemoryCache !== DEFAULT_POSTTEST_URL) {
-      return this.posttestUrlMemoryCache;
+    if (this.posttestUrlMemoryCache[cycle] && this.posttestUrlMemoryCache[cycle] !== defaultUrl) {
+      return this.posttestUrlMemoryCache[cycle]!;
     }
 
-    const stored = await safeGet<string>(STORAGE_KEYS.POSTTEST_URL, DEFAULT_POSTTEST_URL);
-    this.posttestUrlMemoryCache = stored || DEFAULT_POSTTEST_URL;
-    return this.posttestUrlMemoryCache;
+    const stored = await safeGet<string>(storageKey, defaultUrl);
+    this.posttestUrlMemoryCache[cycle] = stored || defaultUrl;
+    return this.posttestUrlMemoryCache[cycle]!;
   }
 
   /**
-   * Menyimpan URL Google Form Posttest Pembelajaran ke penyimpanan lokal
+   * Menyimpan URL Google Form Posttest Pembelajaran ke penyimpanan lokal per siklus
    */
-  public static async setPosttestUrl(url: string): Promise<void> {
-    const cleanUrl = (url || '').trim() || DEFAULT_POSTTEST_URL;
-    const sanitized = sanitizeWebUrl(cleanUrl) || DEFAULT_POSTTEST_URL;
-    this.posttestUrlMemoryCache = sanitized;
-    await safeSet(STORAGE_KEYS.POSTTEST_URL, sanitized);
+  public static async setPosttestUrl(url: string, overrideCycle?: number): Promise<void> {
+    const cycle = overrideCycle ?? (this.activeCycleMemoryCache || 1);
+    const defaultUrl = POSTTEST_CYCLE_URLS[cycle] || DEFAULT_POSTTEST_URL;
+    const cleanUrl = (url || '').trim() || defaultUrl;
+    const sanitized = sanitizeWebUrl(cleanUrl) || defaultUrl;
+    const storageKey = cycle === 2 ? STORAGE_KEYS.POSTTEST_URL_C2 : STORAGE_KEYS.POSTTEST_URL;
+    this.posttestUrlMemoryCache[cycle] = sanitized;
+    await safeSet(storageKey, sanitized);
   }
 
   /**
@@ -766,15 +799,14 @@ export class StorageService {
 
     const identityRows = isIndividual
       ? [
-          formatRow('Identitas Murid', `${session?.studentName || 'Murid'} (No. ${session?.studentAbsen || '-'})`),
-          formatRow('Simbol Avatar Murid', (session?.teamSymbol || 'algoritma').toUpperCase()),
+          formatRow('Nama Lengkap Murid', session?.studentName || 'Murid'),
+          formatRow('Nomor Absen Murid', session?.studentAbsen !== undefined ? String(session.studentAbsen) : '-'),
           formatRow('Mode Pembelajaran', 'Mandiri (1 Murid • 1 Perangkat)')
         ]
       : [
           formatRow('Identitas Murid (Arsip)', session?.pairId || 'Penyelidik Logika'),
-          formatRow('Simbol Avatar', (session?.teamSymbol || 'algoritma').toUpperCase()),
-          formatRow('Murid 1 (No. Absen)', `${session?.student1Name || 'Murid 1'} (No. ${session?.student1Absen || '-'})`),
-          formatRow('Murid 2 (No. Absen)', `${session?.student2Name || 'Murid 2'} (No. ${session?.student2Absen || '-'})`),
+          formatRow('Murid 1 (No. Absen)', `${session?.student1Name || 'Murid 1'} (No. ${session?.student1Absen ?? '-'})`),
+          formatRow('Murid 2 (No. Absen)', `${session?.student2Name || 'Murid 2'} (No. ${session?.student2Absen ?? '-'})`),
           formatRow('Mode Pembelajaran', 'Arsip Sesi Awal (22 Sept)')
         ];
 

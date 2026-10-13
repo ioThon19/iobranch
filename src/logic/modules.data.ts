@@ -82,7 +82,7 @@ export const CASE_MODULES: CaseModule[] = [
     hints: {
       level1: 'Periksa nilai saldo kartu yang dimasukkan saat ini.',
       level2: 'Operator >= memeriksa apakah saldo bernilai lebih besar atau sama dengan Rp4.000.',
-      level3: 'Jika saldo kurang dari 4000, kondisi bernilai FALSE dan program mengeksekusi blok LAINNYA.'
+      level3: 'Jika saldo kurang dari 4000, kondisi bernilai FALSE dan program menjalankan blok LAINNYA.'
     }
   },
   {
@@ -168,7 +168,7 @@ export const CASE_MODULES: CaseModule[] = [
     cycleRequired: 1,
     concept: 'Percabangan Ganda (IF - ELSE)',
     weightPoints: 40,
-    storyPrompt: 'Kantin Digital Cerdas Kota Harmoni baru saja meluncurkan fitur promo kupon potongan belanja Rp5.000. Namun, banyak murid bingung dan menduga mesin kasir sedang eror karena beberapa dari mereka tidak mendapatkan potongan harga saat membayar makanan.\n\nSistem kasir digital bekerja berdasarkan aturan percabangan ganda (IF - ELSE): Diskon kupon Rp5.000 HANYA diberikan JIKA total belanjaan murid mencapai minimal Rp25.000 (total_belanja >= 25000). Jika total belanja di bawah nominal tersebut, mesin kasir otomatis mengeksekusi cabang LAINNYA dengan menagih tarif normal tanpa potongan.\n\nTugas Penyelidikanmu:\nBuktikan mengapa belanja Rp18.000 tidak memicu diskon kupon, dan buktikan berapa total belanjaan yang harus dipenuhi agar kupon potongan belanja Rp5.000 berhasil terpotong di struk kasir!',
+    storyPrompt: 'Kantin Digital Cerdas Kota Harmoni baru saja meluncurkan fitur promo kupon potongan belanja Rp5.000. Namun, banyak murid bingung dan menduga mesin kasir sedang eror karena beberapa dari mereka tidak mendapatkan potongan harga saat membayar makanan.\n\nSistem kasir digital bekerja berdasarkan aturan percabangan ganda (IF - ELSE): Diskon kupon Rp5.000 HANYA diberikan JIKA total belanjaan murid mencapai minimal Rp25.000 (total_belanja >= 25000). Jika total belanja di bawah nominal tersebut, mesin kasir otomatis menjalankan cabang LAINNYA dengan menagih tarif normal tanpa potongan.\n\nTugas Penyelidikanmu:\nBuktikan mengapa belanja Rp18.000 tidak memicu diskon kupon, dan buktikan berapa total belanjaan yang harus dipenuhi agar kupon potongan belanja Rp5.000 berhasil terpotong di struk kasir!',
     inputVariable: 'total_belanja',
     inputLabel: 'Total Belanja (Rp)',
     defaultInput: 18000,
@@ -251,7 +251,7 @@ export const CASE_MODULES: CaseModule[] = [
     cycleRequired: 2,
     concept: 'Percabangan Bertingkat (ELSE - IF)',
     weightPoints: 50,
-    storyPrompt: 'Saat pelaksanaan asesmen pembelajaran digital di Laboratorium Komputer Sekolah Kota Harmoni, beberapa murid mengeluhkan tampilan soal yang lambat dimuat, sementara murid di baris lain melaporkan koneksi berjalan lancar. Router cerdas laboratorium ternyata sedang mengalami kendala dalam mengklasifikasikan pembagian prioritas lebar pita (bandwidth) antrean data.\n\nRouter jaringan diprogram menggunakan rantai percabangan bertingkat ELSE - IF: Kualitas koneksi diklasifikasikan menjadi Koneksi Cepat HANYA JIKA kecepatan terdeteksi minimal 50 Mbps (kecepatan >= 50). JIKA TIDAK dan kecepatan minimal 20 Mbps (kecepatan >= 20), sistem menetapkannya sebagai Koneksi Sedang. Untuk kecepatan di bawah 20 Mbps, router otomatis mengeksekusi cabang terakhir sebagai Koneksi Lambat.\n\nTugas Penyelidikanmu:\nBuktikan mengapa kecepatan 35 Mbps dialokasikan ke jalur Koneksi Sedang, dan selidiki berapa ambang batas kecepatan minimal yang harus dipenuhi agar perangkat murid memperoleh prioritas tertinggi Koneksi Cepat!',
+    storyPrompt: 'Saat pelaksanaan asesmen pembelajaran digital di Laboratorium Komputer Sekolah Kota Harmoni, beberapa murid mengeluhkan tampilan soal yang lambat dimuat, sementara murid di baris lain melaporkan koneksi berjalan lancar. Router cerdas laboratorium ternyata sedang mengalami kendala dalam mengklasifikasikan pembagian prioritas lebar pita (bandwidth) antrean data.\n\nRouter jaringan diprogram menggunakan rantai percabangan bertingkat ELSE - IF: Kualitas koneksi diklasifikasikan menjadi Koneksi Cepat HANYA JIKA kecepatan terdeteksi minimal 50 Mbps (kecepatan >= 50). JIKA TIDAK dan kecepatan minimal 20 Mbps (kecepatan >= 20), sistem menetapkannya sebagai Koneksi Sedang. Untuk kecepatan di bawah 20 Mbps, router otomatis menjalankan cabang terakhir sebagai Koneksi Lambat.\n\nTugas Penyelidikanmu:\nBuktikan mengapa kecepatan 35 Mbps dialokasikan ke jalur Koneksi Sedang, dan selidiki berapa ambang batas kecepatan minimal yang harus dipenuhi agar perangkat murid memperoleh prioritas tertinggi Koneksi Cepat!',
     inputVariable: 'kecepatan',
     inputLabel: 'Kecepatan Internet (Mbps)',
     defaultInput: 35,

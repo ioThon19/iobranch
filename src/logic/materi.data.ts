@@ -578,7 +578,7 @@ SELESAI JIKA`,
 } else {
     printf("Saldo Kurang, Silakan Isi Ulang\\n");
 }`,
-          description: 'Kedua cabang saling melengkapi: bila saldo memenuhi syarat maka blok IF aktif, bila tidak maka blok ELSE yang dieksekusi.'
+          description: 'Kedua cabang saling melengkapi: bila saldo memenuhi syarat maka blok IF aktif, bila tidak maka blok ELSE yang dijalankan.'
         }
       },
       {
@@ -621,7 +621,7 @@ SELESAI JIKA`,
       {
         heading: '1. Alur Evaluasi dari Atas ke Bawah',
         content: 'Komputer menguji ekspresi kondisi satu demi satu mulai dari baris paling atas:<br />' +
-          '• Begitu satu kondisi bernilai TRUE, blok kodenya langsung dieksekusi dan seluruh cabang di bawahnya dilewati.<br />' +
+          '• Begitu satu kondisi bernilai TRUE, blok kodenya langsung dijalankan dan seluruh cabang di bawahnya dilewati.<br />' +
           '• Jika bernilai FALSE, komputer turun memeriksa kondisi else-if berikutnya.<br />' +
           '• Blok else penutup bertindak sebagai eksekusi terakhir bila semua syarat di atasnya bernilai FALSE.',
         codeSnippet: {
@@ -645,7 +645,7 @@ SELESAI JIKA`,
         }
       },
       {
-        heading: '2. Prinsip Air Terjun (Waterfall Execution)',
+        heading: '2. Prinsip Air Terjun (Urutan Pemeriksaan Kode)',
         content: 'Dalam percabangan bertingkat, penulisan syarat wajib mengikuti prinsip air terjun:<br />' +
           '• Urutan syarat ketat (nilai batas tertinggi) wajib diletakkan di bagian paling awal.<br />' +
           '• Syarat yang lebih longgar diletakkan di cabang berikutnya.<br />' +
@@ -669,7 +669,7 @@ SELESAI JIKA`,
     ],
     diagramType: 'flowchart_nested',
     proTips: 'Selalu letakkan syarat yang paling ketat dengan angka batas tertinggi di urutan paling atas agar tidak terhalang oleh syarat yang lebih longgar.',
-    misconceptionWarning: 'Urutan rentang nilai yang terbalik memicu unreachable code (baris mati). Jika syarat "kuota >= 50" ditulis sebelum "kuota >= 100", maka kuota bernilai 120 akan langsung tersangkut di cabang 50 dan cabang 100 tidak akan pernah dieksekusi!',
+    misconceptionWarning: 'Urutan rentang nilai yang terbalik memicu unreachable code (baris mati). Jika syarat "kuota >= 50" ditulis sebelum "kuota >= 100", maka kuota bernilai 120 akan langsung tersangkut di cabang 50 dan cabang 100 tidak akan pernah dijalankan!',
     interactiveCheck: {
       question: 'Mengapa syarat dengan kriteria paling ketat wajib ditulis di baris paling atas pada struktur else-if?',
       options: [
@@ -755,7 +755,7 @@ SELESAI PILIH`,
         {
           label: 'Menghentikan eksekusi dan segera keluar dari struktur switch agar case berikutnya tidak ikut dijalankan.',
           isCorrect: true,
-          explanation: 'Tepat sekali! Tanpa break;, program akan mengalami fall-through dan mengeksekusi case selanjutnya secara berurutan.'
+          explanation: 'Tepat sekali! Tanpa break;, program akan mengalami fall-through dan menjalankan case selanjutnya secara berurutan.'
         },
         {
           label: 'Menghapus nilai variabel masukan agar memori perangkat menjadi bersih.',
