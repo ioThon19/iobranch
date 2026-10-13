@@ -124,7 +124,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
             lineNumber: line.lineNumber,
             lineTextPseudo: formattedPseudo,
             lineTextC: formattedC,
-            description: `Kondisi 1 terpenuhi: mengeksekusi blok "Koneksi Cepat"`,
+            description: `Kondisi 1 terpenuhi: menjalankan blok "Koneksi Cepat"`,
             activeBranch: 'BRANCH_IF',
             terminalOutput
           });
@@ -155,7 +155,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
             lineNumber: line.lineNumber,
             lineTextPseudo: formattedPseudo,
             lineTextC: formattedC,
-            description: `Kondisi 2 terpenuhi: mengeksekusi blok "Koneksi Sedang"`,
+            description: `Kondisi 2 terpenuhi: menjalankan blok "Koneksi Sedang"`,
             activeBranch: 'BRANCH_IF',
             terminalOutput
           });
@@ -183,7 +183,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
             lineNumber: line.lineNumber,
             lineTextPseudo: formattedPseudo,
             lineTextC: formattedC,
-            description: `Mengeksekusi blok alternatif terakhir: "Koneksi Lambat"`,
+            description: `Menjalankan blok alternatif terakhir: "Koneksi Lambat"`,
             activeBranch: 'BRANCH_ELSE',
             terminalOutput
           });
@@ -260,7 +260,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
             lineNumber: line.lineNumber,
             lineTextPseudo: formattedPseudo,
             lineTextC: formattedC,
-            description: `Cocok dengan KASUS 1: mengeksekusi "Menu Kopi Hangat"`,
+            description: `Cocok dengan KASUS 1: menjalankan "Menu Kopi Hangat"`,
             activeBranch: 'BRANCH_IF',
             terminalOutput
           });
@@ -275,7 +275,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
             lineNumber: line.lineNumber,
             lineTextPseudo: formattedPseudo,
             lineTextC: formattedC,
-            description: `Cocok dengan KASUS 2: mengeksekusi "Menu Teh Manis"`,
+            description: `Cocok dengan KASUS 2: menjalankan "Menu Teh Manis"`,
             activeBranch: 'BRANCH_IF',
             terminalOutput
           });
@@ -290,7 +290,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
             lineNumber: line.lineNumber,
             lineTextPseudo: formattedPseudo,
             lineTextC: formattedC,
-            description: `Cocok dengan KASUS 3: mengeksekusi "Menu Susu Segar"`,
+            description: `Cocok dengan KASUS 3: menjalankan "Menu Susu Segar"`,
             activeBranch: 'BRANCH_IF',
             terminalOutput
           });
@@ -385,7 +385,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
           lineNumber: line.lineNumber,
           lineTextPseudo: formattedPseudo,
           lineTextC: formattedC,
-          description: `Kondisi bernilai BENAR (TRUE): mengeksekusi instruksi cabang IF: "${outputText}"`,
+          description: `Kondisi bernilai BENAR (TRUE): menjalankan instruksi cabang IF: "${outputText}"`,
           activeBranch: 'BRANCH_IF',
           terminalOutput: outputText
         });
@@ -405,7 +405,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
         const isElseKeyword = !line.pseudoText.includes('TAMPILKAN');
         const description = isElseKeyword
           ? 'Kondisi bernilai SALAH (FALSE): alur eksekusi melompat ke blok alternatif LAINNYA'
-          : `Mengeksekusi instruksi cabang LAINNYA: "${outputText}"`;
+          : `Menjalankan instruksi cabang LAINNYA: "${outputText}"`;
 
         steps.push({
           stepNumber: stepIndex++,
@@ -427,7 +427,7 @@ export function traceModuleExecution(moduleData: CaseModule, inputVal: number): 
         terminalOutput = outputText;
       }
       const desc = outputText
-        ? `Mengeksekusi instruksi: "${outputText}"`
+        ? `Menjalankan instruksi: "${outputText}"`
         : `Penelusuran percabangan selesai. Jalur kondisi berhasil dibuktikan dan tercatat pada sistem.`;
 
       steps.push({

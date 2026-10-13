@@ -162,11 +162,11 @@ export class SyntaxRenderer {
         const highlighted = this.highlightSyntax(textWithInput, this.currentMode);
 
         return `
-          <div class="code-line" data-line="${line.lineNumber}" style="display: flex; align-items: baseline; min-height: 24px; padding: 2px 4px; font-family: var(--font-code); font-size: 11.5px; line-height: 1.5; border-radius: 4px; transition: background 0.15s ease; box-sizing: border-box;">
+          <div class="code-line" data-line="${line.lineNumber}" style="display: flex; align-items: baseline; min-height: 24px; padding: 2px 6px; font-family: var(--font-code); font-size: 11.5px; line-height: 1.5; border-radius: 4px; transition: background 0.15s ease; box-sizing: border-box; gap: 6px;">
             <span class="line-cursor" style="display: inline-block; width: 8px; flex-shrink: 0; color: var(--warning); font-weight: bold; user-select: none;"></span>
-            <span class="line-num" style="display: inline-block; width: 18px; flex-shrink: 0; text-align: right; margin-right: 6px; color: #71717a; font-size: 11px; user-select: none;">${line.lineNumber}</span>
-            <span class="line-code" style="flex: 1; min-width: 0; white-space: pre; color: #f4f4f5; font-family: var(--font-code); font-size: 11.5px;">${highlighted}</span>
-            <span class="line-skipped-tag" style="display: none; margin-left: auto; font-size: 9.5px; color: #a1a1aa; font-family: var(--font-ui); font-style: italic; padding-left: 6px;">[dilewati komputer]</span>
+            <span class="line-num" style="display: inline-block; width: 18px; flex-shrink: 0; text-align: right; margin-right: 4px; color: #71717a; font-size: 11px; user-select: none;">${line.lineNumber}</span>
+            <span class="line-code" style="flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; color: #f4f4f5; font-family: var(--font-code); font-size: 11.5px;">${highlighted}</span>
+            <span class="line-skipped-tag" style="display: none; margin-left: auto; flex-shrink: 0; font-size: 9.5px; color: #a1a1aa; font-family: var(--font-ui); font-style: italic; padding-left: 8px; white-space: nowrap;">[dilewati komputer]</span>
           </div>
         `;
       })
@@ -180,14 +180,21 @@ export class SyntaxRenderer {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
 
-    // 1. Ekstraksi string literal dengan placeholder agar tidak terpengaruh tokenisasi kata kunci/angka
+    // 1. Ekstraksi komentar jika ada (// ...)
+    const comments: string[] = [];
+    escaped = escaped.replace(/(\/\/.*$)/g, (match) => {
+      comments.push(`<span class="tok-comment">${match}</span>`);
+      return `___COMMENT_TOK_${comments.length - 1}___`;
+    });
+
+    // 2. Ekstraksi string literal dengan placeholder agar tidak terpengaruh tokenisasi kata kunci/angka
     const strings: string[] = [];
     escaped = escaped.replace(/(&quot;.*?&quot;|".*?"|'.*?')/g, (match) => {
       strings.push(`<span class="tok-str">${match}</span>`);
       return `___STR_TOK_${strings.length - 1}___`;
     });
 
-    // 2. Kata kunci sesuai mode
+    // 3. Kata kunci sesuai mode
     if (mode === 'pseudo') {
       escaped = escaped.replace(
         /\b(JIKA|MAKA|SELAIN_ITU|SELESAI|TAMPILKAN|MASUKAN|KASUS|LAINNYA|PILIH|STANDAR|BACA)\b/g,
@@ -200,14 +207,15 @@ export class SyntaxRenderer {
       );
     }
 
-    // 3. Angka numerik
+    // 4. Angka numerik
     escaped = escaped.replace(
       /\b(\d+)\b/g,
       '<span class="tok-num">$1</span>'
     );
 
-    // 4. Kembalikan string literal
+    // 5. Kembalikan string literal dan komentar
     escaped = escaped.replace(/___STR_TOK_(\d+)___/g, (_, idx) => strings[Number(idx)] ?? '');
+    escaped = escaped.replace(/___COMMENT_TOK_(\d+)___/g, (_, idx) => comments[Number(idx)] ?? '');
 
     return escaped;
   }

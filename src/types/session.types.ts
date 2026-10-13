@@ -15,7 +15,7 @@ export interface StudentSession {
   student2Name?: string;
   student2Absen?: number;
 
-  teamSymbol: TeamSymbol;
+  teamSymbol?: TeamSymbol;
   totalXp: number; // Akumulasi poin pengalaman (default: 0)
   currentLevel: number; // Kalkulasi: Math.floor(totalXp / 100) + 1
   createdAt: number;

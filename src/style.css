@@ -1,7 +1,5 @@
 /* src/style.css - Official iobranch Design System (SSOT: DESIGN.md & Reference Sheet) */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Press+Start+2P&display=swap');
-
 :root {
   /* Brand Palette: Forest Emerald & Warm Amber (Zero Blue AI-Slop) */
   --primary: #0f766e;
@@ -72,8 +70,23 @@
 
   /* Fonts */
   --font-pixel: 'Press Start 2P', monospace, sans-serif;
-  --font-ui: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-ui: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-code: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+
+  /* Spacing Scale (4px / 8px Grid - Impeccable Rhythm) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Prose & Readability (45-75 cpl optimal reading container) */
+  --prose-max-width: 65ch;
+  --prose-line-height: 1.6;
 
   /* State Logic Badges */
   --brand-cyan: var(--primary);
@@ -163,7 +176,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: var(--prose-line-height, 1.6);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -201,7 +214,7 @@ p,
   text-wrap: pretty;
 }
 
-/* Tabular Numerics untuk Skor Formatif, Timer, Telemetri, & Statistik */
+/* Tabular Numerics untuk Skor Formatif, Timer, Pantauan Nilai, & Statistik */
 .hud-stat-val,
 .timer-badge,
 .telemetry-val,
@@ -262,6 +275,7 @@ p,
 .btn-close-modal:focus-visible,
 .tactile-switch-track:focus-visible,
 .btn-test-preset-chip:focus-visible,
+.tracing-predict-chip:focus-visible,
 .dpad-btn:focus-visible,
 .virtual-action-btn:focus-visible,
 .radio-option-card:focus-visible,
@@ -292,14 +306,15 @@ p,
   flex-shrink: 0;
   z-index: 100;
   background-color: #ede9e1;
-  border-bottom: 2px solid var(--border-retro);
+  border-bottom: 1.5px solid var(--border-retro);
   box-shadow: 0 2px 8px rgba(28, 25, 23, 0.05);
   padding-top: env(safe-area-inset-top, 0px);
 }
 
 .retro-navbar {
   margin: 0;
-  padding: 8px 18px;
+  padding: 8px 16px;
+  min-height: 54px;
   background: transparent;
   border: none;
   border-radius: 0;
@@ -313,6 +328,15 @@ p,
   box-sizing: border-box;
 }
 
+@media (min-width: 1024px) {
+  .retro-navbar {
+    min-height: 54px;
+    max-height: 58px;
+    flex-wrap: nowrap;
+    padding: 8px 16px;
+  }
+}
+
 .navbar-brand-wrapper {
   display: inline-flex;
   align-items: center;
@@ -320,17 +344,21 @@ p,
   user-select: none;
   -webkit-user-select: none;
   flex-shrink: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
 .navbar-brand-plate {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 2px 4px;
-  background-color: transparent;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
   border: none;
   border-radius: 0;
   box-shadow: none;
+  cursor: default;
 }
 
 .navbar-brand-logo {
@@ -339,11 +367,13 @@ p,
   object-fit: contain;
   display: block;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.12));
+  flex-shrink: 0;
 }
 
 .navbar-brand-meta {
   display: flex;
   flex-direction: column;
+  cursor: default;
 }
 
 .navbar-brand-title {
@@ -360,9 +390,70 @@ p,
   color: var(--text-secondary);
 }
 
-.navbar-team-badge {
-  font-size: 9.5px;
-  padding: 2px 8px;
+.navbar-right-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.navbar-right-controls:empty {
+  display: none;
+}
+
+/* Chip Identitas Murid (Profil Taktil Impeccable) */
+.navbar-student-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.navbar-student-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.navbar-student-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.navbar-student-absen {
+  flex-shrink: 0;
+}
+
+.navbar-student-sep {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.navbar-student-name {
+  display: inline-block;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 /* =================================================================
@@ -1079,13 +1170,14 @@ select {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  gap: 12px;
 }
 
 @media (min-width: 1024px) {
   .navbar-top-bar {
     width: auto;
     justify-content: flex-start;
-    gap: 12px;
+    gap: 16px;
   }
 }
 
@@ -1242,43 +1334,298 @@ select {
 .hero-landing-wrapper {
   position: relative;
   width: 100%;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: calc(100dvh - var(--header-height, 56px) - var(--footer-height, 42px));
   height: 100%;
-  min-height: 0;
-  background-image: url('/assets/hero_image.webp');
-  background-size: cover;
-  background-position: center;
+  background-color: var(--bg-app, #F7F5F0);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   padding: clamp(16px, 3vw, 32px);
+  padding-right: clamp(24px, 6vw, 100px);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
-.hero-landing-overlay {
+.hero-landing-overlay,
+.hero-backdrop-layer {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle at center, rgba(247, 245, 240, 0.45) 0%, rgba(247, 245, 240, 0.85) 75%, rgba(247, 245, 240, 0.95) 100%);
+  inset: 0;
   pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    90deg,
+    rgba(247, 245, 240, 0) 0%,
+    rgba(247, 245, 240, 0.08) 25%,
+    rgba(247, 245, 240, 0.45) 45%,
+    rgba(247, 245, 240, 0.85) 65%,
+    rgba(247, 245, 240, 0.98) 85%,
+    #F7F5F0 100%
+  );
+}
+
+/* Panggung Visual Latar Belakang: Menampung Gambar Hero Penuh & Masking Gradien */
+.hero-stage-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Gambar Hero: Mengisi Penuh Sisi Kiri, Karakter Tetap Utuh */
+.hero-character-visual {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: left 20% center;
+  filter: none;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .hero-menu-card {
   position: relative;
-  z-index: 2;
+  z-index: 10;
   width: 100%;
-  max-width: 400px;
-  margin: auto !important;
+  max-width: 440px;
+  margin: 0;
   align-self: center;
-  background-color: var(--surface-panel);
+  background-color: var(--surface-panel, #ffffff) !important;
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 24px;
-  box-shadow: 0 10px 30px -5px rgba(28, 25, 23, 0.08), 0 4px 10px -2px rgba(28, 25, 23, 0.04);
+  border-radius: 12px;
+  padding: clamp(18px, 2.5vw, 24px);
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 10px 24px -4px rgba(28, 25, 23, 0.07);
   color: var(--text-primary);
   box-sizing: border-box;
+}
+
+.hero-header-block {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.hero-menu-logo-box {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.hero-menu-logo {
+  height: 48px;
+  width: auto;
+  object-fit: contain;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.12));
+  transition: transform 0.15s ease;
+}
+
+.hero-menu-logo:hover {
+  transform: scale(1.04);
+}
+
+.hero-card-title {
+  font-family: var(--font-pixel, 'Press Start 2P', monospace);
+  font-size: 18px;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+}
+
+.hero-card-subtitle {
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: var(--prose-max-width, 65ch);
+  margin: 0 auto;
+}
+
+/* Panel Identitas Murid Aktif di Home Screen */
+.hero-student-profile-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--surface-panel-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.03);
+}
+
+.hero-student-avatar-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.hero-student-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.hero-student-role {
+  color: var(--primary);
+  font-size: 9px;
+  display: block;
+}
+
+.hero-student-name {
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-student-score {
+  color: var(--primary);
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.25);
+  font-weight: 700;
+  flex-shrink: 0;
+  font-size: 10.5px;
+}
+
+/* Indikator Tahap Belajar & Token */
+.hero-cycle-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: var(--surface-panel-alt);
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* Tata Letak Tombol Aksi */
+.hero-actions-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hero-primary-btn {
+  width: 100%;
+  min-height: 52px;
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hero-secondary-btn {
+  width: 100%;
+  min-height: 46px;
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.hero-utility-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.hero-utility-btn {
+  min-height: 44px;
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.hero-secondary-utility-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hero-secondary-utility-link:hover {
+  background: var(--surface-panel-alt);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.hero-footer-account {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-retro);
+  text-align: center;
+  display: flex;
+  justify-content: center;
+}
+
+.hero-discrete-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  font-family: var(--font-ui, 'Plus Jakarta Sans', sans-serif);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.hero-discrete-link span {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: underline;
+  margin-left: 4px;
+}
+
+.hero-discrete-link:hover {
+  color: var(--text-primary);
+}
+
+.hero-discrete-link:hover span {
+  color: var(--primary-hover);
 }
 
 .hero-quote-box {
@@ -1297,27 +1644,168 @@ select {
   box-shadow: 0 4px 14px rgba(28, 25, 23, 0.06);
 }
 
-/* Penyelarasan Posisi Tengah Mutlak untuk Semua Perangkat Mobile & Tablet (<= 1024px) */
-@media (max-width: 1024px) {
+/* =================================================================
+   Penyelarasan Tablet (768px hingga 1023px)
+   ================================================================= */
+
+/* 1. Tablet Portrait (Tinggi > Lebar, e.g. iPad 768px s.d. 834px Portrait) */
+@media (min-width: 768px) and (max-width: 1023px) and (orientation: portrait) {
   .hero-landing-wrapper {
-    flex: 1 0 auto;
-    height: 100%;
-    min-height: 100%;
-    width: 100%;
-    justify-content: center !important;
+    flex: 1 0 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: calc(100dvh - var(--header-height, 56px) - var(--footer-height, 42px)) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
     align-items: center !important;
-    padding: clamp(14px, 4vw, 24px) !important;
+    padding: 0 0 32px 0 !important;
+    background-color: var(--bg-app, #F7F5F0) !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
   }
 
-  .hero-landing-overlay {
-    background: radial-gradient(circle at center, rgba(247, 245, 240, 0.5) 0%, rgba(247, 245, 240, 0.88) 75%, rgba(247, 245, 240, 0.96) 100%) !important;
+  .hero-stage-grid {
+    position: relative !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    flex-shrink: 0 !important;
+    z-index: 1 !important;
+    overflow: hidden !important;
+  }
+
+  .hero-character-visual {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: clamp(260px, 35vh, 360px) !important;
+    object-fit: cover !important;
+    object-position: left 22% top 18% !important;
+  }
+
+  .hero-landing-overlay,
+  .hero-backdrop-layer {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    z-index: 2 !important;
+    background: linear-gradient(
+      180deg,
+      rgba(247, 245, 240, 0) 0%,
+      rgba(247, 245, 240, 0) 45%,
+      rgba(247, 245, 240, 0.45) 75%,
+      var(--bg-app, #F7F5F0) 100%
+    ) !important;
   }
 
   .hero-menu-card {
-    margin: auto !important;
-    align-self: center !important;
-    max-width: min(400px, 100%) !important;
+    position: relative !important;
+    z-index: 10 !important;
+    max-width: 480px !important;
+    width: calc(100% - 48px) !important;
+    margin: -16px auto 32px !important;
+    padding: 24px 28px !important;
+    border-radius: 12px !important;
+    border: 1px solid var(--border-subtle) !important;
+    background-color: var(--surface-panel, #ffffff) !important;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 10px 28px -4px rgba(28, 25, 23, 0.07) !important;
+    box-sizing: border-box !important;
+  }
+
+  .hero-quote-box {
+    display: none !important;
+  }
+}
+
+/* 2. Tablet Landscape (Lebar > Tinggi, e.g. iPad 1024x768 atau 960x600 Landscape) */
+@media (min-width: 768px) and (max-width: 1023px) and (orientation: landscape) {
+  .hero-landing-wrapper {
+    position: relative !important;
     width: 100% !important;
+    flex: 1 1 auto !important;
+    min-height: calc(100dvh - var(--header-height, 56px) - var(--footer-height, 42px)) !important;
+    height: 100% !important;
+    background-color: var(--bg-app, #F7F5F0) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    padding: 12px !important;
+    padding-right: clamp(16px, 4vw, 40px) !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  .hero-stage-grid {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+  }
+
+  .hero-character-visual {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    object-position: left 16% center !important;
+  }
+
+  .hero-landing-overlay,
+  .hero-backdrop-layer {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    z-index: 1 !important;
+    background: linear-gradient(
+      90deg,
+      rgba(247, 245, 240, 0) 0%,
+      rgba(247, 245, 240, 0.06) 20%,
+      rgba(247, 245, 240, 0.45) 45%,
+      rgba(247, 245, 240, 0.88) 68%,
+      rgba(247, 245, 240, 0.98) 88%,
+      #F7F5F0 100%
+    ) !important;
+  }
+
+  .hero-menu-card {
+    position: relative !important;
+    z-index: 10 !important;
+    margin: 0 !important;
+    max-width: 390px !important;
+    width: 100% !important;
+    padding: 18px 20px !important;
+    background-color: var(--surface-panel, #ffffff) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 10px 24px -4px rgba(28, 25, 23, 0.07) !important;
+    box-sizing: border-box !important;
+  }
+
+  .hero-header-block {
+    margin-bottom: 12px !important;
+  }
+
+  .hero-menu-logo {
+    height: 40px !important;
+  }
+
+  .hero-card-title {
+    font-size: 15px !important;
+    margin-bottom: 4px !important;
+  }
+
+  .hero-card-subtitle {
+    font-size: 12.5px !important;
+    line-height: 1.45 !important;
   }
 
   .hero-quote-box {
@@ -1328,34 +1816,32 @@ select {
 /* Tampilan Desktop Menengah (1024px - 1279px) */
 @media (min-width: 1024px) and (max-width: 1279px) {
   .hero-landing-wrapper {
-    background-position: left 22% center;
-    justify-content: flex-end;
     padding-right: clamp(24px, 5vw, 60px);
   }
 
-  .hero-landing-overlay {
-    background: linear-gradient(90deg, rgba(247, 245, 240, 0.25) 0%, rgba(247, 245, 240, 0.78) 52%, rgba(247, 245, 240, 0.96) 100%);
+  .hero-character-visual {
+    object-position: left 20% center;
   }
 
   .hero-menu-card {
     margin: 0 !important;
+    max-width: 420px;
   }
 }
 
 /* Tampilan Desktop Lebar (>= 1280px) */
 @media (min-width: 1280px) {
   .hero-landing-wrapper {
-    background-position: left 20% center;
-    justify-content: flex-end;
     padding-right: clamp(32px, 8vw, 120px);
   }
 
-  .hero-landing-overlay {
-    background: linear-gradient(90deg, rgba(247, 245, 240, 0.2) 0%, rgba(247, 245, 240, 0.75) 50%, rgba(247, 245, 240, 0.95) 100%);
+  .hero-character-visual {
+    object-position: left 20% center;
   }
 
   .hero-menu-card {
     margin: 0 !important;
+    max-width: 440px;
   }
 }
 
@@ -1363,43 +1849,60 @@ select {
 @media (min-width: 1024px) and (max-height: 760px) {
   .hero-landing-wrapper {
     padding: 12px 24px !important;
+    padding-right: clamp(16px, 4vw, 48px) !important;
   }
 
   .hero-menu-card {
-    max-width: 375px !important;
-    padding: 16px 20px !important;
+    max-width: 390px !important;
+    padding: 18px 20px !important;
     border-radius: 12px !important;
-    gap: 8px !important;
   }
 
-  .hero-menu-card > div:first-child {
-    margin-bottom: 8px !important;
+  .hero-header-block {
+    margin-bottom: 10px !important;
   }
 
-  .hero-menu-card #hero-menu-logo {
+  .hero-menu-logo {
     height: 38px !important;
+  }
+
+  .hero-menu-logo-box {
+    margin-bottom: 6px !important;
+  }
+
+  .hero-card-title {
+    font-size: 15px !important;
     margin-bottom: 4px !important;
   }
 
-  .hero-menu-card h1 {
-    font-size: 13px !important;
-    margin-bottom: 4px !important;
-  }
-
-  .hero-menu-card p {
-    font-size: 11px !important;
+  .hero-card-subtitle {
+    font-size: 12px !important;
     line-height: 1.4 !important;
   }
 
-  .hero-menu-card .tactile-panel {
+  .hero-student-profile-panel {
     padding: 8px 12px !important;
     margin-bottom: 8px !important;
   }
 
-  .hero-menu-card .game-btn {
+  .hero-cycle-strip {
+    margin-bottom: 10px !important;
+    padding: 6px 10px !important;
+  }
+
+  .hero-primary-btn {
+    min-height: 46px !important;
+    font-size: 13px !important;
+  }
+
+  .hero-secondary-btn {
+    min-height: 42px !important;
+    font-size: 12px !important;
+  }
+
+  .hero-utility-btn {
     min-height: 40px !important;
     font-size: 11.5px !important;
-    padding: 6px 12px !important;
   }
 
   .hero-quote-box {
@@ -1864,20 +2367,72 @@ select {
    Responsivitas (SSOT: DESIGN.md Section 6 & Mobile 360 px)
    ================================================================= */
 
-/* 1. Mobile Tier (<= 768px) - Handheld Stacked Layout */
-@media (max-width: 768px) {
+/* 1. Mobile Tier (<= 767px) - Handheld Stacked Layout */
+@media (max-width: 767px) {
   .hero-landing-wrapper {
     flex: 1 0 auto !important;
     width: 100% !important;
-    height: 100% !important;
-    min-height: 100% !important;
-    justify-content: center !important;
+    height: auto !important;
+    min-height: calc(100dvh - 55px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
     align-items: center !important;
-    padding: 14px 14px !important;
-    background-image: url('/assets/hero_image.webp') !important;
-    background-size: cover !important;
-    background-position: center center !important;
-    background-repeat: no-repeat !important;
+    padding: 0 !important;
+    background-color: var(--bg-app, #F7F5F0) !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+  }
+
+  .hero-stage-grid {
+    position: relative !important;
+    inset: auto !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    flex-shrink: 0 !important;
+    z-index: 1 !important;
+    overflow: hidden !important;
+  }
+
+  .hero-character-visual {
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: clamp(200px, 32vh, 260px) !important;
+    object-fit: cover !important;
+    object-position: left 20% top 15% !important;
+  }
+
+  .hero-landing-overlay,
+  .hero-backdrop-layer {
+    display: block !important;
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    z-index: 2 !important;
+    background: linear-gradient(
+      180deg,
+      rgba(247, 245, 240, 0) 0%,
+      rgba(247, 245, 240, 0) 45%,
+      rgba(247, 245, 240, 0.45) 75%,
+      var(--bg-app, #F7F5F0) 100%
+    ) !important;
+  }
+
+  .hero-menu-card {
+    position: relative !important;
+    z-index: 10 !important;
+    max-width: min(440px, calc(100% - 24px)) !important;
+    width: 100% !important;
+    margin: -12px auto 28px !important;
+    padding: 18px 16px !important;
+    border-radius: 12px !important;
+    border: 1px solid var(--border-subtle) !important;
+    background-color: var(--surface-panel, #ffffff) !important;
+    box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04), 0 8px 24px -4px rgba(28, 25, 23, 0.06) !important;
     box-sizing: border-box !important;
   }
 
@@ -1996,10 +2551,8 @@ select {
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
-    background-image: url('/assets/hero_image.webp') !important;
-    background-size: cover !important;
-    background-position: center center !important;
-    background-repeat: no-repeat !important;
+    background-image: none !important;
+    background-color: var(--bg-app, #F7F5F0) !important;
   }
 
   .menu-mode .screen-content-wrapper,
@@ -2022,27 +2575,30 @@ select {
   .retro-navbar {
     flex-direction: column;
     align-items: center;
-    padding: 8px 12px 6px;
+    padding: 8px 16px 6px;
     gap: 8px;
     width: 100%;
+    min-height: auto;
+    max-height: none;
   }
 
   .navbar-brand-wrapper {
-    width: 100%;
-    justify-content: center;
-    margin: 0 auto;
+    width: auto;
+    justify-content: flex-start;
+    margin: 0;
   }
 
   .navbar-brand-plate {
     background-color: transparent;
     border: none;
     border-radius: 0;
-    padding: 2px 4px;
+    padding: 0;
     box-shadow: none;
-    gap: 10px;
+    gap: 8px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    cursor: default;
   }
 
   .navbar-brand-logo {
@@ -2154,13 +2710,52 @@ select {
 /* Compact Mobile (<= 480px) */
 @media (max-width: 480px) {
   .hero-menu-card {
-    padding: 16px 16px !important;
-    max-width: 360px !important;
+    padding: 16px 14px !important;
+    border-radius: 12px !important;
+    max-width: min(400px, calc(100% - 20px)) !important;
+    margin: -10px auto 24px !important;
+  }
+
+  .hero-card-title {
+    font-size: 13.5px !important;
+    line-height: 1.35 !important;
+    margin-bottom: 6px !important;
+  }
+
+  .hero-card-subtitle {
+    font-size: 12px !important;
+    line-height: 1.5 !important;
+  }
+
+  .hero-primary-btn {
+    min-height: 48px !important;
+    font-size: 13px !important;
+  }
+
+  .hero-secondary-btn {
+    min-height: 44px !important;
+    font-size: 12px !important;
+  }
+
+  .hero-utility-btn {
+    min-height: 44px !important;
+    font-size: 12px !important;
+  }
+
+  .hero-student-profile-panel {
+    flex-wrap: wrap;
+    padding: 8px 10px !important;
+  }
+
+  .hero-student-score {
+    width: 100%;
+    justify-content: center;
+    margin-top: 4px;
   }
 
   .hero-landing-wrapper {
-    padding: 10px 12px !important;
-    min-height: 100% !important;
+    padding: 0 !important;
+    min-height: calc(100dvh - 48px) !important;
     width: 100% !important;
     flex: 1 0 auto !important;
   }
@@ -2174,6 +2769,53 @@ select {
 
 /* Ultra-Compact Handheld (<= 360px) */
 @media (max-width: 360px) {
+  .hero-menu-card {
+    padding: 14px 12px !important;
+    max-width: calc(100% - 16px) !important;
+    margin: -8px auto 20px !important;
+    border-radius: 10px !important;
+  }
+
+  .hero-menu-logo {
+    height: 36px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .hero-card-title {
+    font-size: 11.5px !important;
+    letter-spacing: 0 !important;
+    line-height: 1.35 !important;
+    margin-bottom: 6px !important;
+  }
+
+  .hero-card-subtitle {
+    font-size: 11px !important;
+    line-height: 1.45 !important;
+  }
+
+  .hero-cycle-strip {
+    padding: 6px 8px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .hero-primary-btn {
+    min-height: 46px !important;
+    font-size: 12px !important;
+    padding: 8px 10px !important;
+  }
+
+  .hero-secondary-btn {
+    min-height: 44px !important;
+    font-size: 11.5px !important;
+    padding: 6px 10px !important;
+  }
+
+  .hero-utility-btn {
+    min-height: 44px !important;
+    font-size: 11px !important;
+    padding: 6px 8px !important;
+  }
+
   .game-footer-banner {
     padding: 3px 8px;
     gap: 4px;
@@ -2592,14 +3234,15 @@ select {
   }
 }
 
-/* Tab Versi Ganda Kode (Bahasa C & Pseudokode) */
-.code-dual-container {
+/* Tab Versi Ganda Kode (Bahasa C & Pseudokode) - Impeccable Redesign */
+.code-dual-container,
+.code-single-container {
   margin: 14px 0 18px;
   border-radius: 10px;
-  border: 1.5px solid var(--border-retro);
-  background: var(--surface-code);
+  border: 1px solid #27272a;
+  background: #18181b;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .code-dual-header {
@@ -2608,7 +3251,7 @@ select {
   justify-content: space-between;
   background: #18181b;
   border-bottom: 1px solid #27272a;
-  padding: 6px 10px;
+  padding: 8px 12px;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -2626,8 +3269,9 @@ select {
 .code-dual-tabs {
   display: inline-flex;
   background: #27272a;
-  padding: 2px;
-  border-radius: 6px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid #3f3f46;
   gap: 2px;
 }
 
@@ -2639,7 +3283,7 @@ select {
   font-size: 11px;
   font-weight: 600;
   padding: 5px 12px;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -2654,22 +3298,154 @@ select {
 .code-dual-tab-btn.active {
   background: var(--primary);
   color: #ffffff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .code-dual-pane {
   display: none;
-  padding: 14px 16px;
-  font-family: var(--font-code);
-  font-size: 12px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-code-var);
 }
 
 .code-dual-pane.active {
   display: block;
+}
+
+.code-viewport {
+  display: flex;
+  background: #18181b;
+  overflow-x: auto;
+  border-radius: 0 0 10px 10px;
+}
+
+.code-gutter {
+  user-select: none;
+  padding: 12px 10px 12px 14px;
+  color: #71717a;
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  line-height: 1.55;
+  text-align: right;
+  border-right: 1px solid #27272a;
+  display: flex;
+  flex-direction: column;
+}
+
+.code-line-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.code-content {
+  margin: 0;
+  padding: 12px 16px;
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #e4e4e7;
+  white-space: pre;
+  overflow-x: auto;
+  flex: 1;
+}
+
+.code-line-text {
+  display: block;
+}
+
+.code-dual-desc {
+  padding: 8px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border-top: 1px solid #27272a;
+  font-size: 11.5px;
+  color: #a1a1aa;
+  line-height: 1.5;
+  font-family: var(--font-ui);
+}
+
+/* Tipografi & Hirarki Materi Pembelajaran (TSK-L04) */
+.materi-title-h2 {
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  color: var(--primary);
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+  margin: 4px 0 6px;
+}
+
+.materi-heading-h3 {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 16px 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.materi-prose {
+  max-width: var(--prose-max-width, 65ch);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: var(--prose-line-height, 1.6);
+  text-wrap: pretty;
+}
+
+/* Tabel Operator Relasional Bersih & Zebra-striping (TSK-L04) */
+.materi-table-wrapper {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 14px 0 18px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);
+}
+
+.materi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.materi-table th {
+  background: var(--surface-panel-alt);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.materi-table td {
+  padding: 10px 14px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.materi-table tr:last-child td {
+  border-bottom: none;
+}
+
+.materi-table tr:nth-child(even) {
+  background: rgba(28, 25, 23, 0.02);
+}
+
+.table-op-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--primary);
+  background: rgba(15, 118, 110, 0.08);
+  border: 1px solid rgba(15, 118, 110, 0.25);
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
 
@@ -2686,24 +3462,27 @@ select {
     padding: 8px 16px 6px;
     gap: 8px;
     width: 100%;
+    min-height: auto;
+    max-height: none;
   }
 
   .navbar-brand-wrapper {
-    width: 100%;
-    justify-content: center;
-    margin: 0 auto;
+    width: auto;
+    justify-content: flex-start;
+    margin: 0;
   }
 
   .navbar-brand-plate {
     background-color: transparent;
     border: none;
     border-radius: 0;
-    padding: 2px 4px;
+    padding: 0;
     box-shadow: none;
-    gap: 10px;
+    gap: 8px;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    cursor: default;
   }
 
   .navbar-brand-logo {
@@ -3052,7 +3831,10 @@ button:disabled {
 .dialog-stepper-pill.locked,
 .materi-stepper-pill.locked,
 .progres-stepper-pill.locked {
-  opacity: 0.6;
+  background: var(--surface-panel-alt);
+  border-color: rgba(28, 25, 23, 0.12);
+  color: var(--text-muted);
+  opacity: 0.7;
   cursor: not-allowed;
 }
 
@@ -3060,7 +3842,7 @@ button:disabled {
 .dialog-progress-track,
 .materi-progress-track,
 .progres-progress-track {
-  height: 6px;
+  height: 4px;
   background: rgba(28, 25, 23, 0.08);
   border-radius: 999px;
   overflow: hidden;
@@ -3255,6 +4037,185 @@ button:disabled {
   .battle-actions-grid {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* =================================================================
+   Pak Budi Dialog & Crisis Facilities (TSK-L03 Impeccable Relayout)
+   ================================================================= */
+.pak-budi-dialog-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+@media (max-width: 640px) {
+  .pak-budi-dialog-layout {
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+}
+
+.pak-budi-portrait-card {
+  width: 130px;
+  flex-shrink: 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .pak-budi-portrait-card {
+    width: 100%;
+    max-width: 180px;
+  }
+}
+
+.pak-budi-avatar-img {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.08);
+  object-fit: cover;
+  display: block;
+  margin: 0 auto;
+}
+
+.pak-budi-speech-balloon {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);
+}
+
+.pak-budi-speech-balloon::before {
+  content: "";
+  position: absolute;
+  top: 36px;
+  left: -9px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 9px solid var(--border-subtle);
+  pointer-events: none;
+}
+
+.pak-budi-speech-balloon::after {
+  content: "";
+  position: absolute;
+  top: 36px;
+  left: -7px;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-right: 8px solid var(--surface-panel);
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .pak-budi-speech-balloon {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px 16px;
+  }
+  .pak-budi-speech-balloon::before {
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 9px solid var(--border-subtle);
+    border-top: none;
+  }
+  .pak-budi-speech-balloon::after {
+    top: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 8px solid var(--surface-panel);
+    border-top: none;
+  }
+}
+
+.pak-budi-dialog-prose {
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+}
+
+/* 5 Crisis Facility Cards Grid (Pak Budi Dialog Stack 2) */
+.dialog-crisis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .dialog-crisis-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dialog-crisis-card {
+  background: var(--surface-panel-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dialog-crisis-card:hover {
+  border-color: rgba(15, 118, 110, 0.4);
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.06);
+}
+
+.dialog-crisis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dialog-crisis-title {
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.dialog-crisis-desc {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.dialog-crisis-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(28, 25, 23, 0.08);
+  font-family: var(--font-code);
+  font-size: 11px;
 }
 
 /* =================================================================
@@ -3780,8 +4741,14 @@ button:disabled {
 }
 
 .tracing-step-item.completed {
-  background: rgba(16, 185, 129, 0.06);
-  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.45);
+}
+
+.tracing-step-item:not(.active):not(.completed) {
+  background: var(--surface-panel-alt);
+  border: 1px solid var(--border-subtle);
+  opacity: 0.9;
 }
 
 /* ==========================================================================
@@ -4042,10 +5009,23 @@ button:disabled {
   transition: all 0.2s ease;
 }
 
+@keyframes stepBadgePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(15, 118, 110, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+  }
+}
+
 .tracing-step-item.active .tracing-step-badge {
   background: var(--primary);
   color: #ffffff;
   box-shadow: 0 2px 6px rgba(15, 118, 110, 0.35);
+  animation: stepBadgePulse 1.8s infinite;
 }
 
 .tracing-step-item.completed .tracing-step-badge {
@@ -4366,7 +5346,7 @@ button:disabled {
 
 .tracing-workbench-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 58fr) minmax(320px, 42fr);
   gap: 20px;
   align-items: start;
   width: 100%;
@@ -4400,20 +5380,15 @@ button:disabled {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   box-sizing: border-box;
 }
 
 .tracing-views-wrapper.mode-both {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 12px;
-}
-
-@media (min-width: 768px) {
-  .tracing-views-wrapper.mode-both {
-    grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
 }
 
 /* Segmented View Switcher (Kode vs Diagram vs Keduanya) */
@@ -4445,6 +5420,7 @@ button:disabled {
   font-size: 11.5px;
   font-weight: 600;
   padding: 6px 14px;
+  min-height: 40px;
   border-radius: 6px;
   border: none;
   background: transparent;
@@ -4465,7 +5441,7 @@ button:disabled {
   box-shadow: 0 1px 3px rgba(28, 25, 23, 0.08);
 }
 
-/* Konsol Kendali & Telemetri Terpadu */
+/* Konsol Kendali & Pemantau Nilai Terpadu */
 .tracing-console-card {
   background: var(--surface-panel);
   border: 1px solid var(--border-subtle);
@@ -4499,18 +5475,29 @@ button:disabled {
 .tracing-stepper-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-top: 8px;
   width: 100%;
   box-sizing: border-box;
 }
 
+.tracing-stepper-grid .game-btn {
+  min-height: 48px;
+}
+
 .tracing-telemetry-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
+}
+
+@media (max-width: 520px) {
+  .tracing-telemetry-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 .tracing-telemetry-chip {
@@ -4537,6 +5524,7 @@ button:disabled {
 .tracing-telemetry-val {
   font-size: 14px;
   font-family: var(--font-code);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   color: var(--text-primary);
   word-break: break-word;
@@ -4684,7 +5672,7 @@ button:disabled {
   display: block;
 }
 
-/* Tombol Pintas Pembuktian Hipotesis */
+/* Tombol Pintas Pembuktian Dugaan */
 .tracing-hypothesis-highlight-btn {
   font-size: 12.5px;
   font-weight: 700;
@@ -5095,13 +6083,18 @@ button:disabled {
     font-size: 11.5px !important;
   }
 
+  .navbar-top-bar {
+    gap: 6px !important;
+  }
+
   .navbar-brand-plate {
-    padding: 2px 4px !important;
+    padding: 0 !important;
     gap: 6px !important;
     border-radius: 0 !important;
     border: none !important;
     background-color: transparent !important;
     box-shadow: none !important;
+    cursor: default !important;
   }
 
   .navbar-brand-logo {
@@ -5109,11 +6102,33 @@ button:disabled {
   }
 
   .navbar-brand-title {
-    font-size: 9px !important;
+    font-size: 9.5px !important;
   }
 
   .navbar-brand-subtitle {
-    font-size: 6.5px !important;
+    font-size: 7px !important;
+  }
+
+  .navbar-right-controls {
+    gap: 6px !important;
+  }
+
+  .navbar-student-badge {
+    padding: 3px 8px !important;
+    gap: 4px !important;
+    font-size: 11.5px !important;
+  }
+
+  .navbar-student-badge .navbar-student-name {
+    max-width: 110px !important;
+  }
+
+  .navbar-guide-btn {
+    min-height: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    width: 34px !important;
+    padding: 0 !important;
   }
 
   .syntax-renderer-wrapper {
@@ -5165,23 +6180,7 @@ button:disabled {
   box-shadow: 0 4px 12px rgba(28, 25, 23, 0.1);
 }
 
-/* =================================================================
-   Grid Pemilih Lambang Tim Onboarding (Anti-Cramping Mobile <= 480px)
-   ================================================================= */
-.onboarding-team-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  width: 100%;
-  box-sizing: border-box;
-}
 
-@media (max-width: 480px) {
-  .onboarding-team-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-  }
-}
 
 /* =================================================================
    Bilah Tab Navigasi Dasbor Progres (Screen 08 - Zero Hidden Tab Mobile 360px)
@@ -5286,4 +6285,177 @@ button:disabled {
     grid-template-columns: 1fr;
     gap: 6px;
   }
+}
+
+/* =================================================================
+   Portofolio & Dasbor Progres Formatif (Impeccable Scorecard & Showcase)
+   ================================================================= */
+.progres-scorecard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .progres-scorecard-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.progres-pillar-card {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);
+  box-sizing: border-box;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.progres-pillar-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
+}
+
+.progres-pillar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.progres-pillar-title {
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progres-pillar-score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+
+.progres-pillar-score {
+  font-family: var(--font-code);
+  font-size: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.progres-pillar-denom {
+  font-family: var(--font-code);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.progres-pillar-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.progres-composite-card {
+  background: #ffffff;
+  border: 1.5px solid var(--primary);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(15, 118, 110, 0.08);
+  box-sizing: border-box;
+}
+
+/* Shelf Lencana Prestasi (Square Tactile Tiles) */
+.badge-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .badge-showcase-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.badge-showcase-tile {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(28, 25, 23, 0.04);
+  box-sizing: border-box;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.badge-showcase-tile:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.08);
+}
+
+.badge-tile-img-frame {
+  width: 68px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
+}
+
+.badge-tile-title {
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.badge-tile-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Banner Konfirmasi Upload Cloud (Mint Sage Theme) */
+.cloud-upload-mint-banner {
+  background: #ecfdf5;
+  border: 1.5px solid rgba(16, 185, 129, 0.4);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+  box-sizing: border-box;
 }

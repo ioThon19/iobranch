@@ -50,6 +50,17 @@ export class FlowgorithmView {
 
   private render(): void {
     this.container.innerHTML = `
+      <div class="flowgorithm-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px; width: 100%; box-sizing: border-box;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="display: inline-flex; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0;"></span>
+          <span style="font-family: var(--font-code); font-size: 11px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.4px;">
+            DIAGRAM ALIR LOGIKA
+          </span>
+        </div>
+        <span style="font-size: 10.5px; font-family: var(--font-ui); color: var(--text-secondary); background: var(--surface-panel-alt); padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border-subtle);">
+          Visualisasi Evaluasi Jalur
+        </span>
+      </div>
       <!-- Kanvas SVG Diagram Alir -->
       <div class="flowgorithm-canvas-box">
         ${this.buildSvgContent()}

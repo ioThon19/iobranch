@@ -6,17 +6,23 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "e2e run"
   },
   "dependencies": {
     "idb-keyval": "^6.2.1",
     "phaser": "^3.87.0"
   },
   "devDependencies": {
+    "@ai-sdk/google": "^4.0.93",
+    "@e2e-dev/web": "^0.14.0",
     "@types/node": "^22.10.2",
+    "ai": "^7.0.0",
+    "e2e": "^0.19.0",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-pwa": "^0.21.1",
-    "workbox-window": "^7.3.0"
+    "workbox-window": "^7.3.0",
+    "zod": "^4.1.8"
   }
 }
